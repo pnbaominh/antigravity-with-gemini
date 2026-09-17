@@ -63,6 +63,7 @@ node ./bin/g2a.js status
 | `g2a plan "<task>"` | Nhờ Gemini Thinking lập kế hoạch phân đoạn chi tiết |
 | `g2a review` | Nhờ Gemini review độc lập git diff và kết quả test |
 | `g2a tunnel` | Bật Cloudflare Quick Tunnel để kết nối từ xa |
+| `g2a mcp` | Chạy máy chủ G2A MCP qua Stdio kết nối trực tiếp Antigravity harness |
 
 ---
 

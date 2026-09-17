@@ -11,7 +11,9 @@ import { GeminiPlanner } from "../gemini/planner.js";
 import { GeminiReviewer } from "../gemini/reviewer.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import { getGitDiff, getGitStatus } from "../workspace/git.js";
-import { getAntigravitySkillsDirectory } from "../config/paths.js";
+import { getAntigravitySkillsDirectory, getAntigravityMcpConfigPath } from "../config/paths.js";
+import { writeAntigravityMcpSchemas } from "../mcp/schemas.js";
+import { runMcpStdio } from "../mcp/stdio.js";
 import { CloudflaredTunnelProvider } from "../tunnel/cloudflared.js";
 import { saveTunnelState, loadTunnelState, clearTunnelState } from "../tunnel/state.js";
 import { DEFAULT_PORT, DEFAULT_HOST } from "../config/constants.js";
@@ -37,11 +39,40 @@ export async function setupCommand(workspaceRoot: string, options: { apiKey?: st
     console.log(pc.yellow(`! Local skill file not found at ${normalizedSkillSource}. Skipping copy.`));
   }
 
-  // 2. Doctor checks
+  // 2. Register in Antigravity mcp_config.json
+  const mcpConfigPath = getAntigravityMcpConfigPath();
+  try {
+    let mcpConfig: any = { mcpServers: {} };
+    if (fs.existsSync(mcpConfigPath)) {
+      mcpConfig = JSON.parse(fs.readFileSync(mcpConfigPath, "utf-8"));
+      if (!mcpConfig.mcpServers) mcpConfig.mcpServers = {};
+    }
+    const cliEntry = path.resolve(fileURLToPath(new URL("../../dist/cli/index.js", import.meta.url)));
+    mcpConfig.mcpServers["antigravity-with-gemini"] = {
+      command: "node",
+      args: [cliEntry, "mcp"],
+      env: options.apiKey ? { GEMINI_API_KEY: options.apiKey } : undefined,
+    };
+    fs.mkdirSync(path.dirname(mcpConfigPath), { recursive: true });
+    fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2), "utf-8");
+    console.log(pc.green(`✓ Registered in Antigravity MCP config: ${mcpConfigPath}`));
+  } catch (err: any) {
+    console.log(pc.yellow(`! Could not update mcp_config.json: ${err?.message}`));
+  }
+
+  // 3. Generate Antigravity MCP tool schemas
+  try {
+    const written = writeAntigravityMcpSchemas();
+    console.log(pc.green(`✓ Generated ${written.length} Antigravity MCP tool schemas.`));
+  } catch (err: any) {
+    console.log(pc.yellow(`! Could not generate MCP schemas: ${err?.message}`));
+  }
+
+  // 4. Doctor checks
   const checks = await runDoctorChecks(workspaceRoot);
   printDoctorReport(checks);
 
-  // 3. Pairing code
+  // 5. Pairing code
   const pairingManager = new PairingManager();
   const code = pairingManager.generateCode(workspaceRoot);
   console.log(pc.cyan(`✓ Workspace initialized.`));
@@ -194,3 +225,8 @@ export async function tunnelCommand(workspaceRoot: string, options: { stop?: boo
     console.error(pc.red(`Tunnel error: ${err?.message || err}\n`));
   }
 }
+
+export async function mcpCommand(workspaceRoot: string, options: { apiKey?: string }) {
+  await runMcpStdio(workspaceRoot, options);
+}
+

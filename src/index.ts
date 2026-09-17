@@ -16,6 +16,8 @@ export * from "./gemini/planner.js";
 export * from "./gemini/reviewer.js";
 export * from "./mcp/server.js";
 export * from "./mcp/http.js";
+export * from "./mcp/stdio.js";
+export * from "./mcp/schemas.js";
 export * from "./tunnel/provider.js";
 export * from "./tunnel/cloudflared.js";
 export * from "./bridge/server.js";

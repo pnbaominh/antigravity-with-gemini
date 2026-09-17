@@ -69,6 +69,7 @@ node ./bin/g2a.js status
 | `g2a plan "<task>"` | Ask Gemini Thinking to break down a task into phased steps |
 | `g2a review` | Ask Gemini to perform an adversarial review of current git diff |
 | `g2a tunnel` | Start a public Cloudflare quick tunnel for remote connections |
+| `g2a mcp` | Run G2A MCP server over Stdio for direct Antigravity harness integration |
 
 ---
 

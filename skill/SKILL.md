@@ -109,4 +109,6 @@ g2a pair            # Generate a new 6-digit one-time pairing code
 g2a plan "<task>"   # Request a deep thinking plan from Gemini
 g2a review          # Request an adversarial review of current git diff
 g2a tunnel          # Launch a Cloudflare public quick tunnel
+g2a mcp             # Run G2A MCP server over Stdio for direct Antigravity harness integration
 ```
+

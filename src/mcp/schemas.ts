@@ -1,0 +1,172 @@
+import fs from "node:fs";
+import path from "node:path";
+import { getAntigravityMcpDirectory } from "../config/paths.js";
+
+export const TOOL_SCHEMAS: Record<string, any> = {
+  workspace_info: {
+    name: "workspace_info",
+    description: "Get high-level information about the current workspace (root path, git branch, package manager, detected frameworks).",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  list_directory: {
+    name: "list_directory",
+    description: "List directory files and folders safely, respecting .gitignore and .g2aignore.",
+    parameters: {
+      type: "object",
+      properties: {
+        subDir: { type: "string", description: "Subdirectory relative to workspace root" },
+        maxDepth: { type: "integer", description: "Maximum directory depth (default: 3)" },
+      },
+      additionalProperties: false,
+    },
+  },
+  read_file: {
+    name: "read_file",
+    description: "Read content from a workspace file with line slicing. Sensitive files (.env, keys) are strictly blocked.",
+    parameters: {
+      type: "object",
+      properties: {
+        filePath: { type: "string", description: "Relative path to file within workspace" },
+        startLine: { type: "integer", description: "First line to read (1-indexed)" },
+        endLine: { type: "integer", description: "Last line to read (inclusive)" },
+      },
+      required: ["filePath"],
+      additionalProperties: false,
+    },
+  },
+  search_workspace: {
+    name: "search_workspace",
+    description: "Search workspace text or regex with file type filtering.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query or regex" },
+        filePattern: { type: "string", description: "Glob pattern for files to include" },
+        caseSensitive: { type: "boolean", description: "Case-sensitive search (default: false)" },
+        maxResults: { type: "integer", description: "Maximum matches to return (default: 50)" },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
+  git_status: {
+    name: "git_status",
+    description: "Get current git status of the workspace (staged, unstaged, untracked files).",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  git_diff: {
+    name: "git_diff",
+    description: "Inspect git diff for uncommitted changes (staged or unstaged).",
+    parameters: {
+      type: "object",
+      properties: {
+        staged: { type: "boolean", description: "Inspect staged diff only" },
+        file: { type: "string", description: "Inspect diff for a specific relative file path" },
+      },
+      additionalProperties: false,
+    },
+  },
+  test_status: {
+    name: "test_status",
+    description: "Get test execution results and output from the most recent test run.",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  execution_summary: {
+    name: "execution_summary",
+    description: "Get an overview summary of Antigravity's current/recent execution session.",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  execution_output: {
+    name: "execution_output",
+    description: "Inspect the detailed stdout/stderr and exit codes from commands executed by Antigravity.",
+    parameters: {
+      type: "object",
+      properties: {
+        commandIndex: { type: "integer", description: "Index of the command to inspect" },
+      },
+      additionalProperties: false,
+    },
+  },
+  gemini_plan: {
+    name: "gemini_plan",
+    description: "Request Gemini Deep Thinking to analyze a task and generate a structured, phased implementation plan with atomic steps and verification criteria.",
+    parameters: {
+      type: "object",
+      properties: {
+        task: { type: "string", description: "The user task or feature description to plan for" },
+        additionalContext: { type: "string", description: "Additional architectural guidelines, technical constraints, or preferences" },
+      },
+      required: ["task"],
+      additionalProperties: false,
+    },
+  },
+  gemini_review: {
+    name: "gemini_review",
+    description: "Request Gemini to perform an adversarial code review of the current git diff and test results against quality, security, and regression checklists.",
+    parameters: {
+      type: "object",
+      properties: {
+        taskDescription: { type: "string", description: "Description of what this change was intended to accomplish" },
+        file: { type: "string", description: "Optional specific file to restrict the diff review to" },
+      },
+      required: ["taskDescription"],
+      additionalProperties: false,
+    },
+  },
+  gemini_think: {
+    name: "gemini_think",
+    description: "Ask Google Gemini Thinking model to reason deeply about a difficult bug, architectural design question, or system tradeoff.",
+    parameters: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "The complex question, bug symptom, or architectural tradeoff to think about" },
+        context: { type: "string", description: "Relevant context, error logs, or code snippets" },
+        thinkingBudget: { type: "integer", description: "Reasoning token budget (default 8192)" },
+      },
+      required: ["question"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const MCP_INSTRUCTIONS = `Antigravity with Gemini (G2A) MCP Server.
+Gemini acts as the planning and thinking brain, while Antigravity acts as the execution harness.
+Use gemini_plan to formulate structured, phased plans for complex coding tasks.
+Use gemini_review to perform independent adversarial code reviews on git diffs.
+Use gemini_think to reason about architectural dilemmas, complex bugs, or tradeoffs.
+Use workspace inspection tools (workspace_info, list_directory, read_file, search_workspace, git_status, git_diff) for safe, read-only context retrieval.`;
+
+export function writeAntigravityMcpSchemas(targetDir?: string): string[] {
+  const dir = targetDir || path.join(getAntigravityMcpDirectory(), "antigravity-with-gemini");
+  fs.mkdirSync(dir, { recursive: true });
+
+  const writtenFiles: string[] = [];
+
+  for (const [toolName, schema] of Object.entries(TOOL_SCHEMAS)) {
+    const filePath = path.join(dir, `${toolName}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(schema, null, 2), "utf-8");
+    writtenFiles.push(filePath);
+  }
+
+  const instructionsPath = path.join(dir, "instructions.md");
+  fs.writeFileSync(instructionsPath, MCP_INSTRUCTIONS, "utf-8");
+  writtenFiles.push(instructionsPath);
+
+  return writtenFiles;
+}

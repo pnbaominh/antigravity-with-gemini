@@ -11,6 +11,7 @@ import {
   planCommand,
   reviewCommand,
   tunnelCommand,
+  mcpCommand,
 } from "./commands.js";
 import { runDoctorChecks, printDoctorReport } from "./doctor.js";
 import { BridgeServer } from "../bridge/server.js";
@@ -104,6 +105,16 @@ program
     const ws = path.resolve(program.opts().workspace);
     await tunnelCommand(ws, options);
   });
+
+program
+  .command("mcp")
+  .description("Run G2A MCP server directly over standard I/O (stdio) for MCP hosts like Antigravity")
+  .option("--api-key <key>", "Google Gemini API Key")
+  .action(async (options) => {
+    const ws = path.resolve(program.opts().workspace);
+    await mcpCommand(ws, options);
+  });
+
 
 // Internal command used when spawned as detached daemon
 program

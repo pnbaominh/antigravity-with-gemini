@@ -33,3 +33,14 @@ export function getAntigravitySkillsDirectory(): string {
   const home = os.homedir();
   return path.join(home, ".gemini", "config", "skills");
 }
+
+export function getAntigravityMcpConfigPath(): string {
+  const home = os.homedir();
+  return path.join(home, ".gemini", "config", "mcp_config.json");
+}
+
+export function getAntigravityMcpDirectory(): string {
+  const home = os.homedir();
+  return path.join(home, ".gemini", "antigravity", "mcp");
+}
+

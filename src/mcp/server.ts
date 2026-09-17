@@ -259,10 +259,9 @@ export function createG2AMcpServer(
     }
   );
 
-  // Register Gemini thinking tools if Gemini client is configured
-  if (options.geminiClient) {
-    registerThinkingTools(server, workspaceRoot, options.geminiClient);
-  }
+  // Always register Gemini thinking tools (gemini_plan, gemini_review, gemini_think)
+  const geminiClient = options.geminiClient ?? new GeminiThinkingClient();
+  registerThinkingTools(server, workspaceRoot, geminiClient);
 
   return server;
 }
