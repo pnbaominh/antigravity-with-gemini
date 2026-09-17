@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import fs from "node:fs";
 import pc from "picocolors";
 import { getGitStatus } from "../workspace/git.js";
-import { getStateDirectory } from "../config/paths.js";
+import { getStateDirectory, getSavedGeminiApiKey } from "../config/paths.js";
 import { BridgeRuntime } from "../bridge/runtime.js";
 
 export interface DoctorCheck {
@@ -69,7 +69,7 @@ export async function runDoctorChecks(workspaceRoot: string): Promise<DoctorChec
   }
 
   // 4. Gemini API Key
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = getSavedGeminiApiKey();
   if (apiKey) {
     const masked = apiKey.slice(0, 4) + "..." + apiKey.slice(-4);
     checks.push({

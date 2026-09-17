@@ -11,7 +11,7 @@ import { GeminiPlanner } from "../gemini/planner.js";
 import { GeminiReviewer } from "../gemini/reviewer.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import { getGitDiff, getGitStatus } from "../workspace/git.js";
-import { getAntigravitySkillsDirectory, getAntigravityMcpConfigPath } from "../config/paths.js";
+import { getAntigravitySkillsDirectory, getAntigravityMcpConfigPath, saveGeminiApiKey } from "../config/paths.js";
 import { writeAntigravityMcpSchemas } from "../mcp/schemas.js";
 import { runMcpStdio } from "../mcp/stdio.js";
 import { CloudflaredTunnelProvider } from "../tunnel/cloudflared.js";
@@ -20,6 +20,11 @@ import { DEFAULT_PORT, DEFAULT_HOST } from "../config/constants.js";
 
 export async function setupCommand(workspaceRoot: string, options: { apiKey?: string }) {
   console.log(pc.bold("\n🚀 Setting up Antigravity with Gemini (G2A)...\n"));
+
+  if (options.apiKey) {
+    process.env.GEMINI_API_KEY = options.apiKey;
+    saveGeminiApiKey(options.apiKey);
+  }
 
   // 1. Install Antigravity Skill
   const skillsDir = getAntigravitySkillsDirectory();

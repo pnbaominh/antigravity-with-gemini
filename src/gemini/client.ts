@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { DEFAULT_GEMINI_MODELS } from "../config/constants.js";
+import { getSavedGeminiApiKey } from "../config/paths.js";
 
 export interface GeminiCallOptions {
   model?: string;
@@ -19,7 +20,7 @@ export class GeminiThinkingClient {
   private apiKey: string | null = null;
 
   constructor(apiKey?: string) {
-    this.apiKey = apiKey || process.env.GEMINI_API_KEY || null;
+    this.apiKey = apiKey || getSavedGeminiApiKey() || null;
     if (this.apiKey) {
       this.client = new GoogleGenAI({ apiKey: this.apiKey });
     }
