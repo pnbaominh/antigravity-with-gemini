@@ -66,10 +66,21 @@ node ./bin/g2a.js status
 | `g2a status` | Inspect bridge PID, active port, SSE endpoint, and tunnel state |
 | `g2a doctor` | Comprehensive environment diagnostics (Node, Git, Cloudflared) |
 | `g2a pair` | Generate a fresh 6-digit one-time pairing code |
-| `g2a plan "<task>"` | Ask Gemini Thinking to break down a task into phased steps |
+| `g2a plan "<task>"` | Ask Gemini Thinking (Principal Architect mode) to create a phased implementation blueprint |
 | `g2a review` | Ask Gemini to perform an adversarial review of current git diff |
 | `g2a tunnel` | Start a public Cloudflare quick tunnel for remote connections |
 | `g2a mcp` | Run G2A MCP server over Stdio for direct Antigravity harness integration |
+
+---
+
+## 🏛️ Principal Architect Planning Engine
+
+When you run `g2a plan "<task>"` or call the MCP tool `gemini_plan`, Gemini (with 8,192 reasoning tokens) generates an elite blueprint strictly structured in 5 sections:
+1. **Executive Summary & Architecture Strategy**: Architectural patterns, Option A vs Option B trade-offs, blast radius & impact analysis, and end-to-end data/state lifecycles.
+2. **File-by-File Technical Specification**: Explicit file demarcation tags (`[NEW]`, `[MODIFY]`, `[DELETE]`, `[TEST]`) with exact types, exported signatures, and invariants.
+3. **Deep Technical Traps, Edge Cases & Guardrails**: Concurrency/race conditions, 429/503 retry budgets, Windows vs POSIX quirks (CRLF, path separators, file locks), security boundary validation, and backward compatibility.
+4. **Phased Implementation Plan**: Sequenced atomic phases with granular task checkboxes (`- [ ] Task N.X`) and concrete, executable verification commands (`**Verification:**`).
+5. **Acceptance Criteria & Quality Gates**: Test suites, type safety checks, and zero-regression policies.
 
 ---
 

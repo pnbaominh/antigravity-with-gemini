@@ -60,10 +60,21 @@ node ./bin/g2a.js status
 | `g2a status` | Xem trạng thái PID, cổng mạng, URL SSE và tunnel |
 | `g2a doctor` | Kiểm tra môi trường (Node >= 20, Git, Cloudflared) |
 | `g2a pair` | Tạo mã pairing 6 chữ số mới |
-| `g2a plan "<task>"` | Nhờ Gemini Thinking lập kế hoạch phân đoạn chi tiết |
+| `g2a plan "<task>"` | Nhờ Gemini Thinking (chế độ Principal Architect) lên blueprint kiến trúc và kế hoạch thi công chi tiết |
 | `g2a review` | Nhờ Gemini review độc lập git diff và kết quả test |
 | `g2a tunnel` | Bật Cloudflare Quick Tunnel để kết nối từ xa |
 | `g2a mcp` | Chạy máy chủ G2A MCP qua Stdio kết nối trực tiếp Antigravity harness |
+
+---
+
+## 🏛️ Động Cơ Lập Kế Hoạch Chuẩn Principal Software Architect
+
+Khi bạn chạy `g2a plan "<task>"` hoặc gọi MCP tool `gemini_plan`, Gemini (với ngân sách suy luận 8,192 reasoning tokens) sẽ hoạt động như một **Principal Software Architect** hàng đầu và xuất ra blueprint gồm 5 phần nghiêm ngặt:
+1. **Executive Summary & Architecture Strategy**: Kiến trúc tổng thể, đánh giá Trade-offs (Phương án A vs Phương án B), phân tích phạm vi ảnh hưởng (Blast Radius), và vòng đời luồng dữ liệu (Data Flow / State Lifecycle).
+2. **File-by-File Technical Specification**: Định danh từng file với thẻ (`[NEW]`, `[MODIFY]`, `[DELETE]`, `[TEST]`), kèm interface, hàm xuất (exported signatures) và điều kiện bất biến.
+3. **Bẫy kỹ thuật sâu & Edge Cases**: Xử lý tranh chấp (concurrency/race conditions), ngân sách retry khi lỗi mạng/rate limit, đặc thù nền tảng Windows (CRLF, đường dẫn, khóa file), bảo mật và tính tương thích ngược.
+4. **Kế hoạch triển khai theo Phase nguyên tử**: Phân rã thành các giai đoạn nối tiếp, mỗi task là một hành động nguyên tử (`- [ ] Task N.X`) kèm lệnh kiểm thử thực thi cụ thể (`**Verification:**`).
+5. **Tiêu chuẩn nghiệm thu & Quality Gates**: Kiểm thử tự động bắt buộc, an toàn kiểu dữ liệu (0 lỗi TypeScript), và đảm bảo không phá vỡ tính năng cũ (zero regressions).
 
 ---
 

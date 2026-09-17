@@ -69,8 +69,13 @@ For complex features, refactors, or bugs, Antigravity delegates planning to Gemi
 ```bash
 g2a plan "<User Task Description>"
 ```
-Or via MCP tool `gemini_plan(task, context)`.  
-Gemini uses its deep reasoning tokens and inspects files through `read_file` / `search_workspace` to formulate a phased checklist with concrete verification steps.
+Or via MCP tool `gemini_plan(task, additionalContext)`.  
+Gemini uses its deep reasoning tokens (8,192 thinking budget) and acts as an elite **Principal Software Architect** to formulate a 5-section implementation blueprint:
+1. **Executive Summary & Architecture Strategy**: Chosen design patterns, Option A vs Option B trade-offs, blast radius & impact analysis, and data/state lifecycle flow.
+2. **File-by-File Technical Specification**: Demarcation tags (`[NEW]`, `[MODIFY]`, `[DELETE]`, `[TEST]`) with exact types, exported signatures, and invariants.
+3. **Deep Technical Traps, Edge Cases & Guardrails**: Concurrency/race conditions, 429/503 retry budgets, Windows vs POSIX quirks (CRLF, path separators, file locks), security boundary validation, and backward compatibility.
+4. **Phased Implementation Plan**: Sequenced atomic phases with granular task checkboxes (`- [ ] Task N.X`) and concrete, executable verification commands (`**Verification:**`).
+5. **Acceptance Criteria & Quality Gates**: Test suites, type safety checks, and zero-regression policies.
 
 ### Stage 3: Phased Execution (`[G2A] EXECUTE`)
 Antigravity executes each phase sequentially:
