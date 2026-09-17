@@ -19,9 +19,15 @@ export function getStateDirectory(): string {
 
 import crypto from "node:crypto";
 
+export function normalizeWorkspacePath(p: string): string {
+  const resolved = path.resolve(p);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
 export function getWorkspaceStateDirectory(workspaceRoot: string): string {
   const baseDir = getStateDirectory();
-  const hash = crypto.createHash("sha256").update(path.resolve(workspaceRoot)).digest("hex").slice(0, 16);
+  const normalized = normalizeWorkspacePath(workspaceRoot);
+  const hash = crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 16);
   const dir = path.join(baseDir, "workspaces", hash);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
