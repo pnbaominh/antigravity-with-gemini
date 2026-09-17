@@ -193,6 +193,14 @@ export class BridgeServer {
           summary: plan.summary,
           phases: plan.phases,
           rawMarkdown: plan.rawMarkdown,
+          compactMarkdown: plan.compactMarkdown,
+          draftMarkdown: plan.draftMarkdown,
+          reviewScore: plan.audit?.score,
+          reviewVerdict: plan.audit?.verdict,
+          reviewCritique: plan.audit?.critique,
+          identifiedIssues: plan.audit?.identifiedIssues,
+          improvementsApplied: plan.audit?.improvementsApplied,
+          tokenReductionPercent: plan.tokenReductionPercent,
           additionalContext,
         });
 

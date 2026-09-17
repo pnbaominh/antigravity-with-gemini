@@ -57,4 +57,44 @@ describe("PlanHistoryStore", () => {
     expect(latest?.task).toBe("Task 2");
     expect(latest?.source).toBe("web");
   });
+
+  it("should save audit metadata and export .g2a/plans/<id>.md artifact", () => {
+    const plan = store.savePlan({
+      task: "Optimize Queries",
+      source: "mcp",
+      model: "gemini-3.6-flash",
+      title: "Query Optimization Plan",
+      summary: "Database query tuning",
+      phases: [
+        {
+          phase: "1: Indexing",
+          tasks: ["Add composite index"],
+          verification: "npm test",
+        },
+      ],
+      rawMarkdown: "# Query Optimization Plan\nFull content here.",
+      compactMarkdown: "# Compact Query Plan",
+      reviewScore: 96,
+      reviewVerdict: "REFINED",
+      reviewCritique: "Approved with Redlock addition",
+      identifiedIssues: ["Missing lock"],
+      improvementsApplied: ["Added Redlock"],
+      tokenReductionPercent: 72,
+    });
+
+    expect(plan.id).toBeDefined();
+    expect(plan.reviewScore).toBe(96);
+    expect(plan.reviewVerdict).toBe("REFINED");
+    expect(plan.tokenReductionPercent).toBe(72);
+    expect(plan.artifactPath).toBeDefined();
+
+    // Verify artifact file actually exists on disk
+    expect(fs.existsSync(plan.artifactPath!)).toBe(true);
+    const diskContent = fs.readFileSync(plan.artifactPath!, "utf8");
+    expect(diskContent).toContain("# Query Optimization Plan");
+
+    const retrieved = store.getLatestPlan();
+    expect(retrieved?.compactMarkdown).toBe("# Compact Query Plan");
+    expect(retrieved?.reviewScore).toBe(96);
+  });
 });

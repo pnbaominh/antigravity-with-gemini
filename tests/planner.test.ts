@@ -89,11 +89,11 @@ describe("GeminiPlanner", () => {
     expect(phases[0].verification).toBe("npm test");
   });
 
-  it("should create plan and extract title and executive summary", async () => {
+  it("should create plan and extract title, summary, and compact plan", async () => {
     const mockClient = {
       generate: vi.fn().mockResolvedValue({
         text: sampleArchitectPlan,
-        model: "gemini-3.8-flash",
+        model: "gemini-3.6-flash",
       }),
     } as unknown as GeminiThinkingClient;
 
@@ -101,11 +101,15 @@ describe("GeminiPlanner", () => {
     const result = await planner.createPlan({
       task: "Build distributed Redis cache",
       workspaceSummary: "Project: test-repo",
+      skipReview: true,
     });
 
     expect(result.title).toBe("Distributed Redis Cache with TTL Invalidation");
     expect(result.summary).toContain("Implement a two-tier cache with local in-memory L1");
     expect(result.phases).toHaveLength(3);
+    expect(result.compactMarkdown).toBeDefined();
+    expect(result.compactMarkdown.length).toBeLessThan(result.rawMarkdown.length);
+    expect(result.tokenReductionPercent).toBeGreaterThan(25);
     expect(mockClient.generate).toHaveBeenCalledWith(
       expect.stringContaining("Build distributed Redis cache"),
       expect.objectContaining({
@@ -113,5 +117,71 @@ describe("GeminiPlanner", () => {
         systemInstruction: expect.stringContaining("Principal Software Architect"),
       })
     );
+  });
+
+  it("should perform closed-loop audit and trigger self-correction when needed", async () => {
+    const auditReviewText = `# Audit Score: 78
+# Audit Verdict: NEEDS_REVISION
+
+## Audit Critique
+Draft plan is missing concrete race-condition locks for cache stampede.
+
+## Key Issues Found
+- Cache stampede mutex not explicitly implemented
+- Windows path separators in file paths
+
+## Required Refinements
+- Add DistributedLock class in src/cache/lock.ts
+- Add verification command for concurrency race test`;
+
+    const refinedPlanText = `# Plan: Hardened Distributed Redis Cache with Mutex Lock
+
+## 1. Executive Summary & Architecture Strategy
+Implement hardened Redis caching with DistributedLock to prevent stampede.
+
+## 2. File-by-File Technical Specification
+- \`[NEW] src/cache/lock.ts\`: Redlock algorithm implementation.
+
+## 3. Deep Technical Traps, Edge Cases & Guardrails
+- Concurrency stampede solved via distributed mutex locks.
+
+## 4. Phased Implementation Plan
+
+### Phase 1: Core Lock & Redis
+- [ ] Task 1.1: Implement Redlock mutex in src/cache/lock.ts
+**Verification:** npm test tests/lock.test.ts
+
+## 5. Acceptance Criteria & Quality Gates
+- Concurrency test passes 100%.`;
+
+    let callCount = 0;
+    const mockClient = {
+      generate: vi.fn().mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          return { text: sampleArchitectPlan, model: "gemini-3.6-flash" };
+        } else if (callCount === 2) {
+          return { text: auditReviewText, model: "gemini-3.6-flash" };
+        } else {
+          return { text: refinedPlanText, model: "gemini-3.6-flash" };
+        }
+      }),
+    } as unknown as GeminiThinkingClient;
+
+    const planner = new GeminiPlanner(mockClient);
+    const result = await planner.createPlan({
+      task: "Build distributed Redis cache with mutex",
+      workspaceSummary: "Project: test-repo",
+    });
+
+    expect(callCount).toBe(3); // 1. Draft -> 2. Audit -> 3. Self-Correction Refinement
+    expect(result.audit).toBeDefined();
+    expect(result.audit?.score).toBe(78);
+    expect(result.audit?.verdict).toBe("REFINED");
+    expect(result.audit?.identifiedIssues).toContain("Cache stampede mutex not explicitly implemented");
+    expect(result.title).toBe("Hardened Distributed Redis Cache with Mutex Lock");
+    expect(result.draftMarkdown).toBe(sampleArchitectPlan);
+    expect(result.compactMarkdown).toContain("Hardened Distributed Redis Cache with Mutex Lock");
+    expect(result.compactMarkdown).toContain("**Gemini Architect Score:** 78/100");
   });
 });

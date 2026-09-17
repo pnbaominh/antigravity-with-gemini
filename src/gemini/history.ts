@@ -13,15 +13,28 @@ export interface StoredPlan {
   summary: string;
   phases: PlanResult["phases"];
   rawMarkdown: string;
+  compactMarkdown?: string;
+  draftMarkdown?: string;
+  reviewScore?: number;
+  reviewVerdict?: "APPROVED" | "REFINED";
+  reviewCritique?: string;
+  identifiedIssues?: string[];
+  improvementsApplied?: string[];
+  tokenReductionPercent?: number;
+  artifactPath?: string;
   additionalContext?: string;
 }
 
 export class PlanHistoryStore {
+  private workspaceRoot: string;
   private filePath: string;
+  private plansDir: string;
 
   constructor(workspaceRoot: string) {
+    this.workspaceRoot = workspaceRoot;
     const dir = getWorkspaceStateDirectory(workspaceRoot);
     this.filePath = path.join(dir, "plans_history.json");
+    this.plansDir = path.join(this.workspaceRoot, ".g2a", "plans");
   }
 
   getPlans(limit = 20): StoredPlan[] {
@@ -43,9 +56,23 @@ export class PlanHistoryStore {
 
   savePlan(plan: Omit<StoredPlan, "id" | "timestamp">): StoredPlan {
     const plans = this.getPlans(50);
+    const id = `plan-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    let artifactPath: string | undefined;
+
+    // Export artifact markdown file to workspace .g2a/plans/
+    try {
+      fs.mkdirSync(this.plansDir, { recursive: true });
+      const planFile = path.join(this.plansDir, `${id}.md`);
+      fs.writeFileSync(planFile, plan.rawMarkdown, "utf8");
+      artifactPath = planFile;
+    } catch {
+      // Non-fatal if workspace directory is read-only
+    }
+
     const stored: StoredPlan = {
-      id: `plan-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id,
       timestamp: Date.now(),
+      artifactPath,
       ...plan,
     };
     plans.push(stored);
