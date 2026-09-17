@@ -9,6 +9,7 @@ import { McpHttpHandler } from "../mcp/http.js";
 import { GeminiThinkingClient } from "../gemini/client.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import { APP_NAME, PROTOCOL_VERSION } from "../config/constants.js";
+import { renderDashboardHtml } from "./html.js";
 
 export interface BridgeServerOptions {
   port: number;
@@ -116,7 +117,7 @@ export class BridgeServer {
       return;
     }
 
-    // Status
+    // Status API
     if (pathname === "/api/status") {
       const info = this.workspaceManager.getInfo();
       const activeCode = this.pairingManager.getActiveCode(this.workspaceRoot);
@@ -129,6 +130,32 @@ export class BridgeServer {
           geminiConfigured: this.geminiClient.isConfigured(),
         })
       );
+      return;
+    }
+
+    // Web Dashboard & OAuth Authorization page
+    if (
+      (pathname === "/" || pathname === "/pair" || pathname === "/oauth/authorize") &&
+      req.method === "GET"
+    ) {
+      const info = this.workspaceManager.getInfo();
+      const activeCode = this.pairingManager.getActiveCode(this.workspaceRoot);
+      const queryParams: Record<string, string> = {};
+      parsedUrl.searchParams.forEach((val, key) => {
+        queryParams[key] = val;
+      });
+
+      const html = renderDashboardHtml({
+        workspaceRoot: this.workspaceRoot,
+        port: this.port,
+        hasActivePairingCode: !!activeCode,
+        geminiConfigured: this.geminiClient.isConfigured(),
+        branch: info.branch || undefined,
+        queryParams,
+      });
+
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
       return;
     }
 
