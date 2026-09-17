@@ -90,6 +90,57 @@ export class GeminiWebClient implements GeminiGenerationClient {
   }
 
   /**
+   * Evaluates whether the current page on gemini.google.com has an authenticated Google user session.
+   * Checks that there are NO 'Sign in' / 'ServiceLogin' links, and an account avatar/profile element is present.
+   */
+  public async isUserAuthenticated(): Promise<boolean> {
+    if (!this.page || this.page.isClosed()) return false;
+    const url = this.page.url();
+    if (url.includes("accounts.google.com") || url.includes("/signin")) {
+      return false;
+    }
+
+    try {
+      return await this.page.evaluate(() => {
+        // 1. Any prominent Sign in buttons/links indicates logged-out state
+        const signInElements = Array.from(document.querySelectorAll("a, button")).filter((el) => {
+          const text = (el.textContent || "").trim().toLowerCase();
+          const href = (el.getAttribute("href") || "").toLowerCase();
+          return (
+            text === "sign in" ||
+            text === "đăng nhập" ||
+            href.includes("accounts.google.com/servicelogin") ||
+            href.includes("servicelogin")
+          );
+        });
+
+        if (signInElements.length > 0) {
+          return false;
+        }
+
+        // 2. Presence of Google Account profile / avatar or Sign Out options
+        const hasAccountIndicator = !!(
+          document.querySelector('a[href*="SignOutOptions"]') ||
+          document.querySelector('a[aria-label*="@gmail.com"]') ||
+          document.querySelector('a[aria-label*="Google Account"]') ||
+          document.querySelector('a[aria-label*="Tài khoản Google"]') ||
+          document.querySelector('button[aria-label*="@gmail.com"]') ||
+          document.querySelector('button[aria-label*="Google Account"]') ||
+          document.querySelector('button[aria-label*="Tài khoản Google"]') ||
+          document.querySelector('button[aria-label*="Account"]') ||
+          document.querySelector("img.gb_A") ||
+          document.querySelector('img[alt*="Google Account"]') ||
+          document.querySelector('img[alt*="profile"]')
+        );
+
+        return hasAccountIndicator;
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Checks if user has an active logged-in session on gemini.google.com
    */
   public async checkLoginStatus(): Promise<boolean> {
@@ -99,25 +150,8 @@ export class GeminiWebClient implements GeminiGenerationClient {
       timeout: 30_000,
     });
 
-    // Wait a brief moment for redirects or UI rendering
     await page.waitForTimeout(3000);
-    const url = page.url();
-
-    // If redirected to Google login or accounts page
-    if (url.includes("accounts.google.com") || url.includes("/signin")) {
-      return false;
-    }
-
-    // Check for presence of chat input or conversation container
-    const hasInput = await page.evaluate(() => {
-      const input =
-        document.querySelector('rich-textarea div[role="textbox"]') ||
-        document.querySelector('div[contenteditable="true"]') ||
-        document.querySelector('div[role="textbox"]');
-      return !!input;
-    });
-
-    return hasInput;
+    return await this.isUserAuthenticated();
   }
 
   /**
@@ -135,26 +169,45 @@ export class GeminiWebClient implements GeminiGenerationClient {
       timeout: 60_000,
     });
 
-    log("Please log in to your Google Account in the opened browser window if prompted.");
+    // Check if already authenticated
+    await page.waitForTimeout(2000);
+    const alreadyAuth = await this.isUserAuthenticated();
+    if (alreadyAuth) {
+      log("✓ Google Gemini Web session already active!");
+      return true;
+    }
 
-    // Poll until login is complete (user lands on gemini chat screen)
+    // Direct user straight to Google Account sign-in page
+    log("Redirecting to Google Account Sign In...");
+    await page.goto(
+      "https://accounts.google.com/ServiceLogin?continue=https://gemini.google.com/app",
+      { waitUntil: "domcontentloaded" }
+    );
+
+    log("Please enter your Google email and password in the opened browser window.");
+    log("Complete 2-Step Verification (2FA) if prompted.");
+    log("Waiting for login to complete (timeout: 10 minutes)...");
+
+    // Poll until login is complete: user must land back on gemini.google.com, sign-in button must be gone, and account profile present
     const startTime = Date.now();
-    const maxWait = 5 * 60 * 1000; // 5 minutes
+    const maxWait = 10 * 60 * 1000; // 10 minutes
 
     while (Date.now() - startTime < maxWait) {
       await page.waitForTimeout(2000);
-      const url = page.url();
-      if (!url.includes("accounts.google.com")) {
-        const hasInput = await page.evaluate(() => {
-          const input =
-            document.querySelector('rich-textarea div[role="textbox"]') ||
-            document.querySelector('div[contenteditable="true"]') ||
-            document.querySelector('div[role="textbox"]');
-          return !!input;
-        });
+      const currentUrl = page.url();
 
-        if (hasInput) {
-          log("✓ Google Gemini Web session detected and active!");
+      // Still on accounts.google.com (user is entering credentials or OTP)
+      if (currentUrl.includes("accounts.google.com")) {
+        continue;
+      }
+
+      // Returned to gemini.google.com
+      if (currentUrl.includes("gemini.google.com")) {
+        const isAuth = await this.isUserAuthenticated();
+        if (isAuth) {
+          log("✓ Google login complete! Session verified and saved to .g2a/browser_profile.");
+          // Wait 3 seconds so cookies are flushed to disk
+          await page.waitForTimeout(3000);
           return true;
         }
       }
@@ -187,14 +240,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
     }
 
     // Check login
-    const isLoggedIn = await page.evaluate(() => {
-      return !!(
-        document.querySelector('rich-textarea div[role="textbox"]') ||
-        document.querySelector('div[contenteditable="true"]') ||
-        document.querySelector('div[role="textbox"]')
-      );
-    });
-
+    const isLoggedIn = await this.isUserAuthenticated();
     if (!isLoggedIn) {
       throw new Error(
         "Google Gemini Web is not logged in. Please run `g2a login-web` in terminal to log in to your Google Account first."
