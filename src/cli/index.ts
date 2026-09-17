@@ -12,6 +12,7 @@ import {
   reviewCommand,
   tunnelCommand,
   mcpCommand,
+  webCommand,
 } from "./commands.js";
 import { runDoctorChecks, printDoctorReport } from "./doctor.js";
 import { BridgeServer } from "../bridge/server.js";
@@ -95,6 +96,14 @@ program
   .action(async (taskDescription) => {
     const ws = path.resolve(program.opts().workspace);
     await reviewCommand(ws, taskDescription);
+  });
+
+program
+  .command("web [task]")
+  .description("Copy project context & Principal Architect prompt to clipboard and open Google Gemini Web")
+  .action(async (task) => {
+    const ws = path.resolve(program.opts().workspace);
+    await webCommand(ws, task);
   });
 
 program

@@ -22,6 +22,8 @@ export function createAuthMiddleware(tokenStore: TokenStore, workspaceRoot: stri
       url.startsWith("/health") ||
       url.startsWith("/api/health") ||
       url.startsWith("/api/status") ||
+      url.startsWith("/api/plans") ||
+      url.startsWith("/api/plan") ||
       url.startsWith("/pair") ||
       url.startsWith("/api/pair") ||
       url.startsWith("/oauth/authorize") ||

@@ -17,9 +17,11 @@ export function getStateDirectory(): string {
   return dir;
 }
 
+import crypto from "node:crypto";
+
 export function getWorkspaceStateDirectory(workspaceRoot: string): string {
   const baseDir = getStateDirectory();
-  const hash = Buffer.from(path.resolve(workspaceRoot)).toString("hex").slice(0, 16);
+  const hash = crypto.createHash("sha256").update(path.resolve(workspaceRoot)).digest("hex").slice(0, 16);
   const dir = path.join(baseDir, "workspaces", hash);
   fs.mkdirSync(dir, { recursive: true });
   return dir;

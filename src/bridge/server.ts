@@ -7,8 +7,11 @@ import { createAuthMiddleware } from "../auth/middleware.js";
 import { createG2AMcpServer } from "../mcp/server.js";
 import { McpHttpHandler } from "../mcp/http.js";
 import { GeminiThinkingClient } from "../gemini/client.js";
+import { GeminiPlanner } from "../gemini/planner.js";
+import { PlanHistoryStore } from "../gemini/history.js";
+import { getGitStatus } from "../workspace/git.js";
 import { WorkspaceManager } from "../workspace/manager.js";
-import { APP_NAME, PROTOCOL_VERSION } from "../config/constants.js";
+import { APP_NAME, PROTOCOL_VERSION, DEFAULT_GEMINI_MODELS } from "../config/constants.js";
 import { renderDashboardHtml } from "./html.js";
 
 export interface BridgeServerOptions {
@@ -29,6 +32,8 @@ export class BridgeServer {
   private geminiClient: GeminiThinkingClient;
   private mcpHttpHandler: McpHttpHandler;
   private workspaceManager: WorkspaceManager;
+  private historyStore: PlanHistoryStore;
+  private planner: GeminiPlanner;
 
   constructor(options: BridgeServerOptions) {
     this.port = options.port;
@@ -45,6 +50,8 @@ export class BridgeServer {
     });
     this.mcpHttpHandler = new McpHttpHandler(mcpServer);
     this.workspaceManager = new WorkspaceManager(this.workspaceRoot);
+    this.historyStore = new PlanHistoryStore(this.workspaceRoot);
+    this.planner = new GeminiPlanner(this.geminiClient);
   }
 
   getPairingManager(): PairingManager {
@@ -130,6 +137,64 @@ export class BridgeServer {
           geminiConfigured: this.geminiClient.isConfigured(),
         })
       );
+      return;
+    }
+
+    // List all plan history for transparency studio
+    if (pathname === "/api/plans" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ plans: this.historyStore.getPlans() }));
+      return;
+    }
+
+    // Get latest plan
+    if (pathname === "/api/plans/latest" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ plan: this.historyStore.getLatestPlan() }));
+      return;
+    }
+
+    // Create a plan directly from Web Studio
+    if (pathname === "/api/plan" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const task = body?.task;
+      const additionalContext = body?.additionalContext;
+
+      if (!task || typeof task !== "string") {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Missing required 'task' field in JSON body" }));
+        return;
+      }
+
+      try {
+        const info = this.workspaceManager.getInfo();
+        const gitStatus = getGitStatus(this.workspaceRoot);
+        const workspaceSummary = `Project: ${info.name}, Branch: ${info.branch || "unknown"}, Package Manager: ${info.packageManager}, Frameworks: ${info.frameworks.join(", ") || "none"}`;
+
+        const plan = await this.planner.createPlan({
+          task,
+          workspaceSummary,
+          gitStatus: gitStatus.summary,
+          additionalContext,
+        });
+
+        const stored = this.historyStore.savePlan({
+          task,
+          source: "web",
+          model: DEFAULT_GEMINI_MODELS.THINKING,
+          title: plan.title,
+          summary: plan.summary,
+          phases: plan.phases,
+          rawMarkdown: plan.rawMarkdown,
+          additionalContext,
+        });
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: true, plan: stored }));
+      } catch (err: any) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: err?.message || String(err) }));
+      }
       return;
     }
 

@@ -5,6 +5,8 @@ import { GeminiReviewer } from "../gemini/reviewer.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import { getGitDiff, getGitStatus } from "../workspace/git.js";
 import { getExecutionSummary, getTestStatus } from "../execution/output.js";
+import { PlanHistoryStore } from "../gemini/history.js";
+import { DEFAULT_GEMINI_MODELS } from "../config/constants.js";
 
 export function registerThinkingTools(
   server: any,
@@ -14,6 +16,7 @@ export function registerThinkingTools(
   const planner = new GeminiPlanner(geminiClient);
   const reviewer = new GeminiReviewer(geminiClient);
   const workspaceManager = new WorkspaceManager(workspaceRoot);
+  const historyStore = new PlanHistoryStore(workspaceRoot);
 
   server.tool(
     "gemini_plan",
@@ -35,6 +38,17 @@ export function registerThinkingTools(
           task,
           workspaceSummary,
           gitStatus: gitStatus.summary,
+          additionalContext,
+        });
+
+        historyStore.savePlan({
+          task,
+          source: "mcp",
+          model: DEFAULT_GEMINI_MODELS.THINKING,
+          title: plan.title,
+          summary: plan.summary,
+          phases: plan.phases,
+          rawMarkdown: plan.rawMarkdown,
           additionalContext,
         });
 

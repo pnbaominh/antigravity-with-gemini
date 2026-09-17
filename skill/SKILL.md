@@ -111,7 +111,8 @@ g2a stop            # Stop the bridge daemon
 g2a status          # Check bridge health, port, and tunnel status
 g2a doctor          # Run environment and permission diagnostics
 g2a pair            # Generate a new 6-digit one-time pairing code
-g2a plan "<task>"   # Request a deep thinking plan from Gemini
+g2a plan "<task>"   # Request a deep thinking plan from Gemini (Principal Architect)
+g2a web "<task>"    # Copy context & prompt and open Google Gemini Web (gemini.google.com)
 g2a review          # Request an adversarial review of current git diff
 g2a tunnel          # Launch a Cloudflare public quick tunnel
 g2a mcp             # Run G2A MCP server over Stdio for direct Antigravity harness integration

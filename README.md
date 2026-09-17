@@ -67,6 +67,7 @@ node ./bin/g2a.js status
 | `g2a doctor` | Comprehensive environment diagnostics (Node, Git, Cloudflared) |
 | `g2a pair` | Generate a fresh 6-digit one-time pairing code |
 | `g2a plan "<task>"` | Ask Gemini Thinking (Principal Architect mode) to create a phased implementation blueprint |
+| `g2a web "<task>"` | Copy workspace context & prompt to clipboard and open Google Gemini Web (gemini.google.com) |
 | `g2a review` | Ask Gemini to perform an adversarial review of current git diff |
 | `g2a tunnel` | Start a public Cloudflare quick tunnel for remote connections |
 | `g2a mcp` | Run G2A MCP server over Stdio for direct Antigravity harness integration |

@@ -61,6 +61,7 @@ node ./bin/g2a.js status
 | `g2a doctor` | Kiểm tra môi trường (Node >= 20, Git, Cloudflared) |
 | `g2a pair` | Tạo mã pairing 6 chữ số mới |
 | `g2a plan "<task>"` | Nhờ Gemini Thinking (chế độ Principal Architect) lên blueprint kiến trúc và kế hoạch thi công chi tiết |
+| `g2a web "<task>"` | Tự động copy ngữ cảnh workspace & prompt chuẩn Architect vào Clipboard và mở giao diện chat web Google Gemini (gemini.google.com) |
 | `g2a review` | Nhờ Gemini review độc lập git diff và kết quả test |
 | `g2a tunnel` | Bật Cloudflare Quick Tunnel để kết nối từ xa |
 | `g2a mcp` | Chạy máy chủ G2A MCP qua Stdio kết nối trực tiếp Antigravity harness |

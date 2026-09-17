@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import pc from "picocolors";
 import { BridgeRuntime } from "../bridge/runtime.js";
@@ -16,7 +17,8 @@ import { writeAntigravityMcpSchemas } from "../mcp/schemas.js";
 import { runMcpStdio } from "../mcp/stdio.js";
 import { CloudflaredTunnelProvider } from "../tunnel/cloudflared.js";
 import { saveTunnelState, loadTunnelState, clearTunnelState } from "../tunnel/state.js";
-import { DEFAULT_PORT, DEFAULT_HOST } from "../config/constants.js";
+import { DEFAULT_PORT, DEFAULT_HOST, DEFAULT_GEMINI_MODELS } from "../config/constants.js";
+import { PlanHistoryStore } from "../gemini/history.js";
 
 export async function setupCommand(workspaceRoot: string, options: { apiKey?: string }) {
   console.log(pc.bold("\n🚀 Setting up Antigravity with Gemini (G2A)...\n"));
@@ -175,6 +177,18 @@ export async function planCommand(workspaceRoot: string, task: string) {
       workspaceSummary: summary,
       gitStatus: gitStatus.summary,
     });
+
+    const historyStore = new PlanHistoryStore(workspaceRoot);
+    historyStore.savePlan({
+      task,
+      source: "cli",
+      model: DEFAULT_GEMINI_MODELS.THINKING,
+      title: plan.title,
+      summary: plan.summary,
+      phases: plan.phases,
+      rawMarkdown: plan.rawMarkdown,
+    });
+
     console.log(plan.rawMarkdown);
     console.log();
   } catch (err: any) {
@@ -233,5 +247,75 @@ export async function tunnelCommand(workspaceRoot: string, options: { stop?: boo
 
 export async function mcpCommand(workspaceRoot: string, options: { apiKey?: string }) {
   await runMcpStdio(workspaceRoot, options);
+}
+
+export async function webCommand(workspaceRoot: string, task?: string) {
+  const workspace = new WorkspaceManager(workspaceRoot);
+  const info = workspace.getInfo();
+  const gitStatus = getGitStatus(workspaceRoot);
+
+  const promptText = `Bạn là một Principal Software Architect và Lead Engineering Planner hàng đầu.
+Nhiệm vụ của bạn là: "Gemini Thinks. Antigravity Works."
+Tôi đang dùng Antigravity (Advanced Agentic Coding Agent) để tự động viết mã và thi công dự án.
+Hãy lên một kế hoạch chi tiết, có tư duy kiến trúc sâu, đánh giá trade-offs, chỉ rõ từng file [NEW], [MODIFY], [DELETE], [TEST], cảnh báo các bẫy kỹ thuật (concurrency, race conditions, Windows CRLF vs POSIX, rate limits), chia thành các Phase nguyên tử kèm lệnh Verification cụ thể.
+
+THÔNG TIN WORKSPACE HIỆN TẠI:
+- Dự án: ${info.name}
+- Thư mục: ${info.root}
+- Nhánh Git: ${info.branch || "main"}
+- Trình quản lý gói: ${info.packageManager}
+- Frameworks: ${info.frameworks.join(", ") || "none"}
+${gitStatus.summary ? `\nTRẠNG THÁI GIT:\n${gitStatus.summary}\n` : ""}
+
+NHIỆM VỤ CẦN LẬP KẾ HOẠCH:
+${task || "Phân tích và tối ưu hóa kiến trúc dự án hiện tại"}
+
+Hãy xuất kế hoạch theo chuẩn 5 phần nghiêm ngặt:
+# Plan: [Tên kế hoạch]
+## 1. Executive Summary & Architecture Strategy
+## 2. File-by-File Technical Specification
+## 3. Deep Technical Traps, Edge Cases & Guardrails
+## 4. Phased Implementation Plan (### Phase 1, ### Phase 2...)
+## 5. Acceptance Criteria & Quality Gates`;
+
+  // Copy to clipboard
+  try {
+    if (process.platform === "win32") {
+      const child = spawn("powershell", ["-NoProfile", "-Command", "$input | Set-Clipboard"], {
+        stdio: ["pipe", "ignore", "ignore"],
+      });
+      child.stdin.write(promptText, "utf8");
+      child.stdin.end();
+    } else if (process.platform === "darwin") {
+      const child = spawn("pbcopy", [], { stdio: ["pipe", "ignore", "ignore"] });
+      child.stdin.write(promptText, "utf8");
+      child.stdin.end();
+    } else {
+      const child = spawn("xclip", ["-selection", "clipboard"], { stdio: ["pipe", "ignore", "ignore"] });
+      child.stdin.write(promptText, "utf8");
+      child.stdin.end();
+    }
+  } catch {}
+
+  // Open Gemini Web URL in default browser
+  const geminiUrl = "https://gemini.google.com/app?hl=vi";
+  try {
+    if (process.platform === "win32") {
+      spawn("cmd", ["/c", "start", "", geminiUrl]);
+    } else if (process.platform === "darwin") {
+      spawn("open", [geminiUrl]);
+    } else {
+      spawn("xdg-open", [geminiUrl]);
+    }
+  } catch {}
+
+  console.log(pc.bold("\n🌐 Google Gemini Web Bridge:\n"));
+  console.log(pc.green("✓ Đã tự động sao chép Prompt & Ngữ cảnh Workspace vào Clipboard!"));
+  console.log(pc.cyan(`✓ Đã mở Google Gemini Web: ${geminiUrl}`));
+  console.log(pc.bold("\n👉 Cách thực hiện cực kỳ đơn giản:"));
+  console.log(pc.white("1. Trình duyệt đã mở màn hình chat ") + pc.bold(pc.cyan("Google Gemini Web")) + pc.white("."));
+  console.log(pc.white("2. Bạn chỉ cần nhấn ") + pc.yellow(pc.bold("Ctrl + V")) + pc.white(" vào ô chat và nhấn ") + pc.yellow(pc.bold("Enter")) + pc.white("."));
+  console.log(pc.white("3. Bạn sẽ thấy Gemini Thinking suy nghĩ và gõ trực tiếp từng dòng plan trên giao diện web của Google!"));
+  console.log(pc.white("4. Sau khi có plan, chỉ cần copy nội dung dán vào chat với Antigravity để bắt đầu tự động thi công code.\n"));
 }
 
