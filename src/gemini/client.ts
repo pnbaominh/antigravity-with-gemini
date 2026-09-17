@@ -65,33 +65,46 @@ export class GeminiThinkingClient {
       config.temperature = options.temperature;
     }
 
-    try {
-      const response = await this.client.models.generateContent({
-        model: modelName,
-        contents: prompt,
-        config,
-      });
+    const fallbackModels = [modelName, DEFAULT_GEMINI_MODELS.FAST, "gemini-3.6-flash"].filter(
+      (m, idx, arr) => arr.indexOf(m) === idx
+    );
 
-      const text = response.text || "";
-      return {
-        text,
-        model: modelName,
-      };
-    } catch (error: any) {
-      // If thinking mode is not supported by chosen model, retry without thinkingConfig
-      if (error?.message?.includes("thinkingConfig") || error?.message?.includes("not supported")) {
-        delete config.thinkingConfig;
-        const retryResponse = await this.client.models.generateContent({
-          model: modelName,
+    let lastError: any;
+    for (const currentModel of fallbackModels) {
+      try {
+        const response = await this.client.models.generateContent({
+          model: currentModel,
           contents: prompt,
           config,
         });
+
+        const text = response.text || "";
         return {
-          text: retryResponse.text || "",
-          model: modelName,
+          text,
+          model: currentModel,
         };
+      } catch (error: any) {
+        lastError = error;
+        // If thinking mode is not supported by chosen model, retry without thinkingConfig
+        if (error?.message?.includes("thinkingConfig") || error?.message?.includes("not supported")) {
+          delete config.thinkingConfig;
+          try {
+            const retryResponse = await this.client.models.generateContent({
+              model: currentModel,
+              contents: prompt,
+              config,
+            });
+            return {
+              text: retryResponse.text || "",
+              model: currentModel,
+            };
+          } catch (retryErr: any) {
+            lastError = retryErr;
+          }
+        }
       }
-      throw error;
     }
+
+    throw lastError;
   }
 }
