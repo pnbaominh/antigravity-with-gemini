@@ -198,7 +198,8 @@ ABSOLUTE CONSTRAINT: Directly begin your output with "# Plan: [Title]". DO NOT o
     workspaceRoot?: string;
   }): Promise<PlanReviewAudit> {
     // If draft is truncated, too short, or lacks required plan title, immediately reject and demand refinement
-    if (params.draftMarkdown.length < 200 || !params.draftMarkdown.includes("# Plan")) {
+    const hasPlanTitle = /#*\s*Plan:/i.test(params.draftMarkdown);
+    if (params.draftMarkdown.length < 200 || !hasPlanTitle) {
       return {
         score: 30,
         verdict: "REFINED",
@@ -358,7 +359,7 @@ ABSOLUTE CONSTRAINT: Directly begin your output with "# Plan: [Title]". DO NOT o
       });
 
       const refinedText = refinedResponse.text?.trim();
-      if (refinedText && refinedText.length > 200 && refinedText.includes("# Plan")) {
+      if (refinedText && refinedText.length > 200 && /#*\s*Plan:/i.test(refinedText)) {
         return refinedText;
       }
       return refinedText || params.draftMarkdown;
@@ -368,7 +369,9 @@ ABSOLUTE CONSTRAINT: Directly begin your output with "# Plan: [Title]". DO NOT o
   }
 
   private parsePlanOutput(rawMarkdown: string): PlanResult {
-    const titleMatch = rawMarkdown.match(/^# (?:Plan:\s*)?(.+)$/m);
+    const titleMatch =
+      rawMarkdown.match(/^(?:#+\s*)?Plan:\s*(.+)$/im) ||
+      rawMarkdown.match(/^# (?:Plan:\s*)?(.+)$/m);
     const title = titleMatch ? titleMatch[1].trim() : "Implementation Plan";
 
     const execSummaryMatch = rawMarkdown.match(

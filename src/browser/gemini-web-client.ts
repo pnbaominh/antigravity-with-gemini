@@ -86,7 +86,52 @@ export class GeminiWebClient implements GeminiGenerationClient {
 
     const pages = this.context.pages();
     this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
+
+    // Stealth: Remove navigator.webdriver flag
+    try {
+      await this.context.addInitScript(() => {
+        Object.defineProperty(navigator, "webdriver", {
+          get: () => undefined,
+        });
+      });
+    } catch {}
+
     return this.page;
+  }
+
+  /**
+   * Handles Google Captcha and dismisses intrusive popups.
+   */
+  public async handleCaptchaAndPopups(page: Page): Promise<void> {
+    if (!page || page.isClosed()) return;
+
+    // 1. Google sorry/captcha detection and auto-resolution
+    if (page.url().includes("/sorry/")) {
+      const frames = page.frames();
+      const recaptchaFrame = frames.find(
+        (f) => f.url().includes("recaptcha") && f.url().includes("anchor")
+      );
+      if (recaptchaFrame) {
+        try {
+          const checkbox = recaptchaFrame.locator("#recaptcha-anchor, .recaptcha-checkbox");
+          if (await checkbox.isVisible()) {
+            await checkbox.click({ timeout: 5000 });
+            await page.waitForTimeout(4000);
+          }
+        } catch {}
+      }
+    }
+
+    // 2. Dismiss promotion / update dialogs if visible
+    try {
+      const dismissBtn = page
+        .locator('button:has-text("Để sau"), button:has-text("Dismiss"), button:has-text("Not now")')
+        .first();
+      if (await dismissBtn.isVisible()) {
+        await dismissBtn.click();
+        await page.waitForTimeout(500);
+      }
+    } catch {}
   }
 
   /**
@@ -95,12 +140,14 @@ export class GeminiWebClient implements GeminiGenerationClient {
    */
   public async isUserAuthenticated(): Promise<boolean> {
     if (!this.page || this.page.isClosed()) return false;
+    await this.handleCaptchaAndPopups(this.page);
     const url = this.page.url();
     if (
       url.includes("accounts.google.com") ||
       url.includes("/signin") ||
       url.includes("identifier") ||
-      url.includes("challenge")
+      url.includes("challenge") ||
+      url.includes("/sorry/")
     ) {
       return false;
     }
@@ -279,6 +326,8 @@ export class GeminiWebClient implements GeminiGenerationClient {
       await page.waitForTimeout(2000);
     }
 
+    await this.handleCaptchaAndPopups(page);
+
     // Check login
     const isLoggedIn = await this.isUserAuthenticated();
     if (!isLoggedIn) {
@@ -294,43 +343,30 @@ export class GeminiWebClient implements GeminiGenerationClient {
     }
 
     // 1. Locate chat input element
-    const inputSelector = 'rich-textarea div[role="textbox"], div[contenteditable="true"], div[role="textbox"]';
-    await page.waitForSelector(inputSelector, { timeout: 15_000 });
-
-    // Focus input element
-    await page.click(inputSelector);
+    const inputSelector =
+      'div[role="textbox"].ql-editor, rich-textarea div[role="textbox"], div[contenteditable="true"], div[role="textbox"]';
+    const textbox = page.locator(inputSelector).first();
+    await textbox.waitFor({ timeout: 15_000 });
+    await textbox.click();
 
     // Count existing responses to detect when new response arrives
     const initialResponseCount = await page.evaluate(() => {
       return document.querySelectorAll('message-content, .model-response, [data-test-id="model-response"]').length;
     });
 
-    // 2. Inject text into input element
-    // Using evaluate + input event for fast, instantaneous pasting of long prompts
-    await page.evaluate(
-      ({ selector, text }) => {
-        const el = document.querySelector(selector) as HTMLElement;
-        if (el) {
-          el.focus();
-          // Clear previous text
-          el.innerText = text;
-          el.dispatchEvent(new Event("input", { bubbles: true }));
-          el.dispatchEvent(new Event("change", { bubbles: true }));
-        }
-      },
-      { selector: inputSelector, text: fullPrompt }
-    );
-
-    // Brief pause to let frontend state update
-    await page.waitForTimeout(500);
+    // 2. Insert text using native keyboard input to preserve Quill's internal Delta state
+    await page.keyboard.insertText(fullPrompt);
+    await page.waitForTimeout(800);
 
     // 3. Click Send button or press Enter
-    const sendButtonSelector =
-      'button[aria-label*="Send"], button[aria-label*="Gửi"], button.send-button, [data-test-id="send-button"]';
-    const hasSendBtn = await page.$(sendButtonSelector);
+    const sendButton = page
+      .locator(
+        'button[aria-label*="Send"], button[aria-label*="Gửi"], button.send-button, [data-test-id="send-button"]'
+      )
+      .first();
 
-    if (hasSendBtn) {
-      await hasSendBtn.click();
+    if (await sendButton.isVisible() && (await sendButton.isEnabled())) {
+      await sendButton.click();
     } else {
       await page.keyboard.press("Enter");
     }
@@ -340,7 +376,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
     const startTime = Date.now();
 
     // Wait until response count increments
-    while (Date.now() - startTime < 15_000) {
+    while (Date.now() - startTime < 20_000) {
       const currentCount = await page.evaluate(() => {
         return document.querySelectorAll('message-content, .model-response, [data-test-id="model-response"]').length;
       });
@@ -355,16 +391,14 @@ export class GeminiWebClient implements GeminiGenerationClient {
     let stableCount = 0;
 
     while (Date.now() - startTime < timeoutMs) {
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1500);
 
       const status = await page.evaluate(() => {
-        // Look for stop button or active spinners
         const stopBtn =
           document.querySelector('button[aria-label*="Stop"], button[aria-label*="Dừng"]') ||
-          document.querySelector('mat-spinner, .loading-indicator, .thinking-indicator');
+          document.querySelector('mat-spinner, .loading-indicator');
         const isGenerating = !!stopBtn;
 
-        // Get latest response text
         const responseEls = document.querySelectorAll(
           'message-content, .model-response, [data-test-id="model-response"]'
         );
@@ -380,20 +414,17 @@ export class GeminiWebClient implements GeminiGenerationClient {
         };
       });
 
-      if (!status.isGenerating) {
-        if (status.latestText && status.latestText === lastContent) {
+      if (status.latestText.length > 50) {
+        if (status.latestText === lastContent && !status.isGenerating) {
           stableCount++;
           if (stableCount >= 2) {
-            // Content has finished streaming and remained stable for 2 seconds
+            // Text is stable and generation has completed
             break;
           }
         } else {
           stableCount = 0;
           lastContent = status.latestText;
         }
-      } else {
-        stableCount = 0;
-        lastContent = status.latestText;
       }
     }
 
@@ -411,6 +442,13 @@ export class GeminiWebClient implements GeminiGenerationClient {
 
     if (!extracted) {
       throw new Error("Failed to extract response text from Gemini Web.");
+    }
+
+    if (
+      extracted.includes("I encountered an error doing what you asked") ||
+      extracted.includes("Tôi đã gặp lỗi khi thực hiện")
+    ) {
+      throw new Error(`Gemini Web responded with backend error: "${extracted}"`);
     }
 
     return {
