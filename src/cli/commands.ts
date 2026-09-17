@@ -184,9 +184,13 @@ export async function loginWebCommand(workspaceRoot: string) {
   }
 }
 
-export async function planCommand(workspaceRoot: string, task: string) {
-  console.log(pc.bold(`\n🧠 Asking Gemini Thinking to plan for: "${task}"...\n`));
-  const client = createDefaultClient();
+export async function planCommand(workspaceRoot: string, task: string, options?: { model?: string }) {
+  console.log(pc.bold(`\n🧠 Asking Gemini Thinking to plan for: "${task}"...`));
+  if (options?.model) {
+    console.log(pc.cyan(`Using requested model: ${options.model}`));
+  }
+  console.log();
+  const client = createDefaultClient(options?.model);
   const planner = new GeminiPlanner(client);
   const workspace = new WorkspaceManager(workspaceRoot);
 

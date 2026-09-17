@@ -88,9 +88,10 @@ program
 program
   .command("plan <task>")
   .description("Ask Gemini Thinking to plan an actionable roadmap for a task")
-  .action(async (task) => {
+  .option("-m, --model <model>", "Model to use on Gemini Web: '3.1 Pro', '3.8 Flash', or '3.5 Flash-Lite'")
+  .action(async (task, options) => {
     const ws = path.resolve(program.opts().workspace);
-    await planCommand(ws, task);
+    await planCommand(ws, task, options);
   });
 
 program

@@ -6,15 +6,20 @@ import { BrowserDetector } from "./detector.js";
 import type { GeminiGenerationClient } from "../gemini/client-interface.js";
 import { PromptSanitizer } from "../gemini/prompt-sanitizer.js";
 
-export interface WebClientConfig {
-  browserPath?: string;
+export interface GeminiWebClientConfig {
+  profileDir?: string;
   userDataDir?: string;
   headless?: boolean;
   timeoutMs?: number;
+  executablePath?: string;
+  browserPath?: string;
+  preferredModel?: string;
 }
 
+export type WebClientConfig = GeminiWebClientConfig;
+
 export class GeminiWebClient implements GeminiGenerationClient {
-  private config: WebClientConfig;
+  private config: GeminiWebClientConfig;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
   private defaultUserDataDir: string;
@@ -350,8 +355,8 @@ export class GeminiWebClient implements GeminiGenerationClient {
       );
     }
 
-    // Ensure highest capability model (3.1 Pro / 3.8 Flash) is selected
-    await this.ensureBestModel(page);
+    // Ensure target model (3.1 Pro / 3.8 Flash / 3.5 Flash-Lite) is selected
+    await this.ensureBestModel(page, options?.model);
 
     // Clean, natural prompt incorporating system instruction if provided
     let fullPrompt = prompt;
@@ -694,8 +699,15 @@ Yêu cầu xuất: Bắt đầu ngay lập tức với "# Plan: [Tiêu đề]", 
    * Automatically switches to the highest capability model available (e.g. 3.1 Pro or 3.8 Flash)
    * to avoid unstable extended modes or legacy limits.
    */
-  public async ensureBestModel(page: Page): Promise<void> {
+  public async ensureBestModel(page: Page, requestedModel?: string): Promise<void> {
     try {
+      const target = (
+        requestedModel ||
+        this.config.preferredModel ||
+        process.env.GEMINI_MODEL ||
+        "3.1 Pro"
+      ).toLowerCase();
+
       const modelSelector = page
         .locator(
           'button[data-test-id="bard-mode-menu-button"], button.input-area-switch, [aria-label*="chọn mô hình"], [aria-label*="model"]'
@@ -703,36 +715,70 @@ Yêu cầu xuất: Bắt đầu ngay lập tức với "# Plan: [Tiêu đề]", 
         .first();
       if (await modelSelector.isVisible()) {
         const currentText = await modelSelector.innerText();
-        // In Gemini Web UI, selecting 3.1 Pro displays "Pro" or "Pro Mở rộng" on the button
-        if (currentText.includes("Pro")) {
-          return;
-        }
 
-        await modelSelector.click();
-        await page.waitForTimeout(800);
+        // 1. Target is 3.8 Flash
+        if (target.includes("3.8") || (target.includes("flash") && !target.includes("lite"))) {
+          if (currentText.includes("Flash") && !currentText.includes("Lite")) {
+            return;
+          }
+          await modelSelector.click();
+          await page.waitForTimeout(800);
+          const flashOption = page
+            .locator(
+              '[role="menuitem"]:has-text("3.8 Flash"), [role="menuitemradio"]:has-text("3.8 Flash"), button:has-text("3.8 Flash")'
+            )
+            .first();
+          if (await flashOption.isVisible()) {
+            await flashOption.click();
+            await page.waitForTimeout(1000);
+            return;
+          }
+        } else if (target.includes("lite") || target.includes("3.5")) {
+          // 2. Target is 3.5 Flash-Lite
+          if (currentText.includes("Lite") || currentText.includes("3.5")) {
+            return;
+          }
+          await modelSelector.click();
+          await page.waitForTimeout(800);
+          const liteOption = page
+            .locator(
+              '[role="menuitem"]:has-text("3.5 Flash-Lite"), [role="menuitemradio"]:has-text("3.5 Flash-Lite"), button:has-text("3.5 Flash-Lite")'
+            )
+            .first();
+          if (await liteOption.isVisible()) {
+            await liteOption.click();
+            await page.waitForTimeout(1000);
+            return;
+          }
+        } else {
+          // 3. Target is 3.1 Pro (default)
+          if (currentText.includes("Pro")) {
+            return;
+          }
+          await modelSelector.click();
+          await page.waitForTimeout(800);
+          const proOption = page
+            .locator(
+              '[role="menuitem"]:has-text("3.1 Pro"), [role="menuitemradio"]:has-text("3.1 Pro"), button:has-text("3.1 Pro")'
+            )
+            .first();
+          if (await proOption.isVisible()) {
+            await proOption.click();
+            await page.waitForTimeout(1000);
+            return;
+          }
 
-        // 1. Prioritize 3.1 Pro
-        const proOption = page
-          .locator(
-            '[role="menuitem"]:has-text("3.1 Pro"), [role="menuitemradio"]:has-text("3.1 Pro"), button:has-text("3.1 Pro")'
-          )
-          .first();
-        if (await proOption.isVisible()) {
-          await proOption.click();
-          await page.waitForTimeout(1000);
-          return;
-        }
-
-        // 2. Next try 3.8 Flash
-        const flashOption = page
-          .locator(
-            '[role="menuitem"]:has-text("3.8 Flash"), [role="menuitemradio"]:has-text("3.8 Flash"), button:has-text("3.8 Flash")'
-          )
-          .first();
-        if (await flashOption.isVisible()) {
-          await flashOption.click();
-          await page.waitForTimeout(1000);
-          return;
+          // Fallback to 3.8 Flash if Pro option not available
+          const flashOption = page
+            .locator(
+              '[role="menuitem"]:has-text("3.8 Flash"), [role="menuitemradio"]:has-text("3.8 Flash"), button:has-text("3.8 Flash")'
+            )
+            .first();
+          if (await flashOption.isVisible()) {
+            await flashOption.click();
+            await page.waitForTimeout(1000);
+            return;
+          }
         }
 
         await page.keyboard.press("Escape");

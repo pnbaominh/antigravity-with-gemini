@@ -163,7 +163,7 @@ export class GeminiThinkingClient implements GeminiGenerationClient {
  * Creates the appropriate Gemini client according to configuration.
  * Prioritizes GeminiWebClient to bypass Studio API quotas unless explicitly set to 'api'.
  */
-export function createDefaultClient(): GeminiGenerationClient {
+export function createDefaultClient(preferredModel?: string): GeminiGenerationClient {
   const engine = (process.env.GEMINI_ENGINE || "web").toLowerCase();
   if (engine === "api") {
     const apiClient = new GeminiThinkingClient();
@@ -171,5 +171,5 @@ export function createDefaultClient(): GeminiGenerationClient {
       return apiClient;
     }
   }
-  return new GeminiWebClient();
+  return new GeminiWebClient({ preferredModel });
 }
