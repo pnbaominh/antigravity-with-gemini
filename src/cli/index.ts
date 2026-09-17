@@ -17,6 +17,7 @@ import {
 import { runDoctorChecks, printDoctorReport } from "./doctor.js";
 import { BridgeServer } from "../bridge/server.js";
 import { DEFAULT_PORT, DEFAULT_HOST } from "../config/constants.js";
+import { getSavedGeminiApiKey } from "../config/paths.js";
 
 // Load .env if present in current working directory
 dotenv.config();
@@ -131,11 +132,12 @@ program
   .action(async () => {
     const ws = process.env.G2A_WORKSPACE || process.cwd();
     const port = parseInt(process.env.G2A_PORT || DEFAULT_PORT.toString(), 10);
+    const apiKey = process.env.GEMINI_API_KEY || getSavedGeminiApiKey() || undefined;
     const server = new BridgeServer({
       port,
       host: DEFAULT_HOST,
       workspaceRoot: ws,
-      geminiApiKey: process.env.GEMINI_API_KEY,
+      geminiApiKey: apiKey,
     });
     await server.start();
   });

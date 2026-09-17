@@ -109,7 +109,7 @@ describe("GeminiPlanner", () => {
     expect(mockClient.generate).toHaveBeenCalledWith(
       expect.stringContaining("Build distributed Redis cache"),
       expect.objectContaining({
-        thinkingBudget: 8192,
+        thinkingBudget: 4096,
         systemInstruction: expect.stringContaining("Principal Software Architect"),
       })
     );

@@ -124,6 +124,13 @@ export class BridgeServer {
       return;
     }
 
+    // Favicon handler
+    if (pathname === "/favicon.ico") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
     // Status API
     if (pathname === "/api/status") {
       const info = this.workspaceManager.getInfo();

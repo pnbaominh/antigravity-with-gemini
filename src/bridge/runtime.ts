@@ -2,30 +2,23 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, execSync } from "node:child_process";
-import { getWorkspaceStateDirectory } from "../config/paths.js";
+import { getWorkspaceStateDirectory, getSavedGeminiApiKey } from "../config/paths.js";
 import { DEFAULT_PORT } from "../config/constants.js";
 import { findAvailablePort } from "./port.js";
 
+function normalizePathForComparison(p: string): string {
+  const resolved = path.resolve(p);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
 function isProcessAlive(pid: number): boolean {
-  if (process.platform === "win32") {
-    try {
-      const stdout = execSync(`tasklist /fi "PID eq ${pid}" /fo csv /nh`, {
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-      return stdout.toLowerCase().includes(`"${pid}"`);
-    } catch {
-      return false;
-    }
-  }
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (e: any) {
+    return e?.code === "EPERM";
   }
 }
-
 
 async function probeBridge(port: number, workspaceRoot: string): Promise<boolean> {
   try {
@@ -37,7 +30,10 @@ async function probeBridge(port: number, workspaceRoot: string): Promise<boolean
     clearTimeout(timeout);
     if (!res.ok) return false;
     const body: any = await res.json();
-    return body.status === "ok" && path.resolve(body.workspace) === path.resolve(workspaceRoot);
+    return (
+      body.status === "ok" &&
+      normalizePathForComparison(body.workspace) === normalizePathForComparison(workspaceRoot)
+    );
   } catch {
     return false;
   }
@@ -110,8 +106,9 @@ export class BridgeRuntime {
       G2A_DAEMON_MODE: "1",
     };
 
-    if (options.apiKey) {
-      env.GEMINI_API_KEY = options.apiKey;
+    const savedKey = options.apiKey || getSavedGeminiApiKey() || process.env.GEMINI_API_KEY;
+    if (savedKey) {
+      env.GEMINI_API_KEY = savedKey;
     }
 
     const child = spawn(process.execPath, [normalizedCliPath, "start-internal"], {

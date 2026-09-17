@@ -27,6 +27,12 @@ export class GeminiThinkingClient {
   }
 
   isConfigured(): boolean {
+    if (!this.apiKey) {
+      const saved = getSavedGeminiApiKey();
+      if (saved) {
+        this.setApiKey(saved);
+      }
+    }
     return !!this.apiKey;
   }
 
@@ -40,6 +46,14 @@ export class GeminiThinkingClient {
     options: GeminiCallOptions = {}
   ): Promise<GeminiResponse> {
     if (!this.client) {
+      const saved = getSavedGeminiApiKey();
+      if (saved) {
+        this.setApiKey(saved);
+      }
+    }
+
+    const client = this.client;
+    if (!client) {
       throw new Error(
         "GEMINI_API_KEY is not configured. Set GEMINI_API_KEY in environment or run `g2a setup --api-key <key>`."
       );
@@ -61,46 +75,65 @@ export class GeminiThinkingClient {
       };
     }
 
-    if (typeof options.temperature === "number") {
+    if (options.temperature !== undefined) {
       config.temperature = options.temperature;
     }
 
-    const fallbackModels = [modelName, DEFAULT_GEMINI_MODELS.FAST, "gemini-3.6-flash"].filter(
+    const fallbackModels = [modelName, DEFAULT_GEMINI_MODELS.FAST, "gemini-3.8-flash"].filter(
       (m, idx, arr) => arr.indexOf(m) === idx
     );
 
     let lastError: any;
     for (const currentModel of fallbackModels) {
-      try {
-        const response = await this.client.models.generateContent({
-          model: currentModel,
-          contents: prompt,
-          config,
-        });
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const modelConfig = { ...config };
+        try {
+          const response = await client.models.generateContent({
+            model: currentModel,
+            contents: prompt,
+            config: modelConfig,
+          });
 
-        const text = response.text || "";
-        return {
-          text,
-          model: currentModel,
-        };
-      } catch (error: any) {
-        lastError = error;
-        // If thinking mode is not supported by chosen model, retry without thinkingConfig
-        if (error?.message?.includes("thinkingConfig") || error?.message?.includes("not supported")) {
-          delete config.thinkingConfig;
-          try {
-            const retryResponse = await this.client.models.generateContent({
-              model: currentModel,
-              contents: prompt,
-              config,
-            });
-            return {
-              text: retryResponse.text || "",
-              model: currentModel,
-            };
-          } catch (retryErr: any) {
-            lastError = retryErr;
+          const text = response.text || "";
+          return {
+            text,
+            model: currentModel,
+          };
+        } catch (error: any) {
+          lastError = error;
+          const errMsg = error?.message || String(error);
+
+          // If temporary demand spike (503 / 429), back off and retry same model
+          const isTransient =
+            errMsg.includes("503") ||
+            errMsg.includes("high demand") ||
+            errMsg.includes("UNAVAILABLE") ||
+            errMsg.includes("429") ||
+            errMsg.includes("RESOURCE_EXHAUSTED");
+
+          if (isTransient && attempt < 2) {
+            await new Promise((r) => setTimeout(r, (attempt + 1) * 1500));
+            continue;
           }
+
+          // If thinking mode is not supported by chosen model, retry without thinkingConfig
+          if (errMsg.includes("thinkingConfig") || errMsg.includes("not supported")) {
+            delete modelConfig.thinkingConfig;
+            try {
+              const retryResponse = await client.models.generateContent({
+                model: currentModel,
+                contents: prompt,
+                config: modelConfig,
+              });
+              return {
+                text: retryResponse.text || "",
+                model: currentModel,
+              };
+            } catch (retryError) {
+              lastError = retryError;
+            }
+          }
+          break; // move to next fallback model
         }
       }
     }

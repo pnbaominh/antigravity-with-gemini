@@ -26,6 +26,7 @@ export function createAuthMiddleware(tokenStore: TokenStore, workspaceRoot: stri
       url.startsWith("/api/plan") ||
       url.startsWith("/pair") ||
       url.startsWith("/api/pair") ||
+      url === "/favicon.ico" ||
       url.startsWith("/oauth/authorize") ||
       url.startsWith("/oauth/token") ||
       url === "/.well-known/oauth-authorization-server"

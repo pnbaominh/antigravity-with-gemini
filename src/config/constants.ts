@@ -7,8 +7,8 @@ export const DEFAULT_PAIRING_TTL_MS = 5 * 60 * 1000; // 5 minutes
 export const MAX_PAIRING_ATTEMPTS = 5;
 
 export const DEFAULT_GEMINI_MODELS = {
-  PLANNER: process.env.GEMINI_PLANNER_MODEL || "gemini-3.8-flash",
-  THINKING: process.env.GEMINI_THINKING_MODEL || "gemini-3.8-flash",
+  PLANNER: process.env.GEMINI_PLANNER_MODEL || "gemini-3.6-flash",
+  THINKING: process.env.GEMINI_THINKING_MODEL || "gemini-3.6-flash",
   FAST: process.env.GEMINI_FAST_MODEL || "gemini-3.6-flash",
 } as const;
 

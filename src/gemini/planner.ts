@@ -94,7 +94,7 @@ Formulate a production-grade, Principal Architect implementation plan following 
 
     const response = await this.client.generate(prompt, {
       systemInstruction,
-      thinkingBudget: 8192,
+      thinkingBudget: 4096,
     });
 
     const rawMarkdown = response.text;
