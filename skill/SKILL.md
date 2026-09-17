@@ -1,6 +1,7 @@
 ---
 name: antigravity-with-gemini
 description: >
+  CRITICAL: Antigravity MUST NEVER formulate plans itself. ALWAYS call gemini_plan MCP tool.
   Gemini thinks. Antigravity works. Use Google Gemini as the planning, reasoning,
   and reviewing brain for Antigravity coding sessions, while Antigravity keeps full
   execution ownership (editing, shell, git, tests).
@@ -11,6 +12,13 @@ description: >
 > **Gemini thinks. Antigravity works.**  
 > Gemini phụ trách suy nghĩ & lập kế hoạch. Antigravity phụ trách thực thi mã nguồn.
 
+> [!CAUTION]
+> ### 🛑 BẮT BUỘC: KHÔNG ĐƯỢC ĐỂ ANTIGRAVITY TỰ LẬP PLAN (ZERO SELF-PLANNING BY ANTI)
+> - **Khi người dùng gọi `/antigravity-with-gemini` hoặc yêu cầu lên plan**: Antigravity **TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ SUY NGHĨ / TỰ VIẾT PLAN** trong ngữ cảnh của mình, và **KHÔNG ĐƯỢC TỰ TẠO `implementation_plan.md`** bằng token của Antigravity!
+> - **HÀNH ĐỘNG BẮT BUỘC**: Antigravity **PHẢI LUÔN LUÔN GỌI MCP TOOL** `gemini_plan` thông qua `call_mcp_tool(ServerName: "antigravity-with-gemini", ToolName: "gemini_plan", Arguments: { task: "..." })` (hoặc chạy lệnh CLI `g2a plan "<task>"`).
+> - Gemini sẽ suy nghĩ chuyên sâu (8,192 reasoning tokens) với các model hiện đại (> 3.0), viết plan chuẩn RULES.MD lưu vào file đĩa `.g2a/plans/plan-<id>.md` và trả về một ticket pointer siêu nhẹ (< 50 tokens).
+> - Antigravity chỉ nhận ticket, báo cho người dùng đường dẫn file plan trên đĩa, và dùng `gemini_get_phase(phaseIndex)` để lấy từng phase JIT khi thực thi, bảo đảm **0% context bloat** cho Antigravity.
+
 Antigravity owns execution: code editing, terminal commands, running test suites, git commits, and recovery.  
 Gemini owns reasoning: codebase understanding, architectural breakdown, edge-case anticipation, and adversarial code reviews.  
 The G2A Bridge provides Gemini with read-only MCP access to the local workspace, so control messages stay tiny (< 1 KB) and repositories are never uploaded wholesale.
@@ -19,10 +27,11 @@ The G2A Bridge provides Gemini with read-only MCP access to the local workspace,
 
 ## ⚡ Golden Rules
 
-1. **NEVER paste entire files, massive diffs, or logs into Gemini.** Gemini reads them on demand through MCP tools (`read_file`, `git_diff`, `execution_output`).
-2. **Strictly Read-Only MCP Boundary:** The G2A bridge server contains zero mutation/write tools. It is architecturally impossible for any prompt injection to modify or delete files.
-3. **Control Messages Stay Small (< 1 KB):** Communication follows the structured `[G2A]` lifecycle.
-4. **Adversarial Independent Review:** Antigravity never self-certifies. After code execution, Gemini independently inspects `git_diff` and `test_status` before giving the final sign-off.
+1. **ANTIGRAVITY NEVER PLANS:** Planning belongs exclusively to Gemini via the `gemini_plan` tool. Antigravity is strictly forbidden from self-planning or polluting its own context window with massive plan text.
+2. **NEVER paste entire files, massive diffs, or logs into Gemini.** Gemini reads them on demand through MCP tools (`read_file`, `git_diff`, `execution_output`).
+3. **Strictly Read-Only MCP Boundary:** The G2A bridge server contains zero mutation/write tools. It is architecturally impossible for any prompt injection to modify or delete files.
+4. **Control Messages Stay Small (< 1 KB):** Communication follows the structured `[G2A]` lifecycle.
+5. **Adversarial Independent Review:** Antigravity never self-certifies. After code execution, Gemini independently inspects `git_diff` and `test_status` before giving the final sign-off.
 
 ---
 
@@ -65,17 +74,19 @@ g2a start
 ```
 
 ### Stage 2: Planning (`[G2A] PLAN`)
-For complex features, refactors, or bugs, Antigravity delegates planning to Gemini:
-```bash
-g2a plan "<User Task Description>"
-```
-Or via MCP tool `gemini_plan(task, additionalContext)`.  
-Gemini uses its deep reasoning tokens (8,192 thinking budget) and acts as an elite **Principal Software Architect** to formulate a 5-section implementation blueprint:
-1. **Executive Summary & Architecture Strategy**: Chosen design patterns, Option A vs Option B trade-offs, blast radius & impact analysis, and data/state lifecycle flow.
-2. **File-by-File Technical Specification**: Demarcation tags (`[NEW]`, `[MODIFY]`, `[DELETE]`, `[TEST]`) with exact types, exported signatures, and invariants.
-3. **Deep Technical Traps, Edge Cases & Guardrails**: Concurrency/race conditions, 429/503 retry budgets, Windows vs POSIX quirks (CRLF, path separators, file locks), security boundary validation, and backward compatibility.
-4. **Phased Implementation Plan**: Sequenced atomic phases with granular task checkboxes (`- [ ] Task N.X`) and concrete, executable verification commands (`**Verification:**`).
-5. **Acceptance Criteria & Quality Gates**: Test suites, type safety checks, and zero-regression policies.
+> [!IMPORTANT]
+> **Antigravity MUST NEVER generate or write a plan itself.** All planning is 100% delegated to Gemini. Antigravity must never create an `implementation_plan.md` using its own model tokens. Antigravity MUST ALWAYS call the MCP tool:
+> `call_mcp_tool(ServerName: "antigravity-with-gemini", ToolName: "gemini_plan", Arguments: { "task": "<User Task Description>" })`
+> Or run the CLI command:
+> `g2a plan "<User Task Description>"`
+
+Gemini uses its deep reasoning tokens (8,192 thinking budget with models > 3.0) and acts as an elite **Principal Software Architect** to formulate a 6-section implementation blueprint according to `RULES.md`:
+1. **Grounded Context & AS-IS State**: Concrete file paths, function signatures, error logs, and system metrics.
+2. **Scope Boundaries**: Explicit In-Scope deliverables and at least 3 mandatory Non-Goals.
+3. **RAID Log & Pre-Mortem**: Risks, Assumptions, Issues, and Dependencies with proactive mitigations.
+4. **WBS & PERT Estimates**: Atomic work packages with expected duration $E$ and uncertainty $\sigma$, adhering to 8/80 hours rule.
+5. **Acceptance Criteria & Quality Gates**: Binary Pass/Fail criteria and Definition of Done.
+6. **Zero-Token Pointer Ticket**: Gemini writes the full plan to disk at `.g2a/plans/plan-<id>.md` and returns a lightweight ticket (<50 tokens) to Antigravity. Antigravity NEVER loads the full plan into its context; it only fetches tasks JIT per phase via `gemini_get_phase(phaseIndex)`.
 
 ### Stage 3: Phased Execution (`[G2A] EXECUTE`)
 Antigravity executes each phase sequentially:

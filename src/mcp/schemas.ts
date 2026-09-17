@@ -224,9 +224,10 @@ export const TOOL_SCHEMAS: Record<string, any> = {
 
 export const MCP_INSTRUCTIONS = `Antigravity with Gemini (G2A) MCP Server.
 Gemini acts as the planning and thinking brain, while Antigravity acts as the execution harness.
+CRITICAL MANDATE: Antigravity MUST NEVER formulate plans itself or pollute its own context window. When asked for a plan or when /antigravity-with-gemini is invoked, Antigravity MUST ALWAYS call the MCP tool 'gemini_plan' (or run 'g2a plan').
 All plans strictly adhere to the RULES.MD Technical Governance Framework.
 The system automatically discovers modern Gemini models (> 3.0) and discards legacy models (<= 3.0).
-Use gemini_plan to formulate structured, phased plans. It returns a lightweight zero-token pointer ticket (<50 tokens).
+Use gemini_plan to formulate structured, phased plans. It returns a lightweight zero-token pointer ticket (<50 tokens) and writes the full plan to disk.
 Use gemini_get_phase(phaseIndex) to fetch tasks JIT on-demand when starting each phase to protect Antigravity's context window.
 Use gemini_active_plan to inspect the active plan's progress and file artifact on disk.
 Use gemini_validate_plan to verify plan compliance against RULES.MD axioms (Non-Goals >= 3, AS-IS Grounding, Single DRI, PERT math).

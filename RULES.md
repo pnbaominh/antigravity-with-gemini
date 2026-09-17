@@ -21,6 +21,9 @@ Kế hoạch chỉ tập trung giải quyết mục tiêu cốt lõi đã cam k�
 ### 1.4. DỪNG KHI GẶP ẨN SỐ (HALT-ON-UNKNOWN PROTOCOL)
 Khi phát hiện thiếu hụt thông số kỹ thuật, biến môi trường hoặc logic nghiệp vụ, LẬP TỨC DỪNG tiến trình lập kế hoạch và phát hành yêu cầu làm rõ định lượng. Tuyệt đối không được phép tự suy diễn để tiếp tục vẽ kế hoạch giả tạo.
 
+### 1.5. TUYỆT ĐỐI GIAO PHÓ KẾ HOẠCH CHO GEMINI (ZERO SELF-PLANNING BY ANTIGRAVITY)
+Antigravity giữ vai trò khung thực thi (Harness), Google Gemini giữ vai trò bộ não lập luận và hoạch định (Brain). Khi có yêu cầu lập kế hoạch (qua `/antigravity-with-gemini` hoặc câu lệnh lập plan), Antigravity **BẮT BUỘC PHẢI GỌI TOOL `gemini_plan`** (hoặc lệnh `g2a plan`), **TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ SUY NGHĨ HOẶC TỰ VIẾT PLAN** trong ngữ cảnh của mình. Kế hoạch phải được lưu xuống đĩa tại `.g2a/plans/` và chỉ chuyển giao con trỏ siêu nhẹ (< 50 tokens) về cho Antigravity để triệt tiêu context bloat.
+
 ---
 
 ## 2. NGUYÊN TẮC THIẾT LẬP KẾ HOẠCH THỰC TẾ
