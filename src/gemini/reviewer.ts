@@ -1,4 +1,4 @@
-import { GeminiThinkingClient } from "./client.js";
+import type { GeminiGenerationClient } from "./client-interface.js";
 
 export interface ReviewFinding {
   severity: "CRITICAL" | "WARNING" | "SUGGESTION";
@@ -16,9 +16,9 @@ export interface ReviewResult {
 }
 
 export class GeminiReviewer {
-  private client: GeminiThinkingClient;
+  private client: GeminiGenerationClient;
 
-  constructor(client: GeminiThinkingClient) {
+  constructor(client: GeminiGenerationClient) {
     this.client = client;
   }
 

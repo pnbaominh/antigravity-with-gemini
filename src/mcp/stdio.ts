@@ -1,6 +1,6 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createG2AMcpServer } from "./server.js";
-import { GeminiThinkingClient } from "../gemini/client.js";
+import { GeminiThinkingClient, createDefaultClient } from "../gemini/client.js";
 
 export interface McpStdioOptions {
   apiKey?: string;
@@ -22,7 +22,7 @@ export async function runMcpStdio(
     console.error("[g2a:stdio]", ...args);
   };
 
-  const geminiClient = new GeminiThinkingClient(options.apiKey);
+  const geminiClient = options.apiKey ? new GeminiThinkingClient(options.apiKey) : createDefaultClient();
   const server = createG2AMcpServer(workspaceRoot, { geminiClient });
   const transport = new StdioServerTransport();
 

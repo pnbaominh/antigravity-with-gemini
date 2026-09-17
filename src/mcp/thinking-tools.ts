@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { GeminiThinkingClient } from "../gemini/client.js";
+import type { GeminiGenerationClient } from "../gemini/client-interface.js";
 import { GeminiPlanner } from "../gemini/planner.js";
 import { GeminiReviewer } from "../gemini/reviewer.js";
 import { WorkspaceManager } from "../workspace/manager.js";
@@ -13,7 +13,7 @@ import { DynamicModelRegistry } from "../gemini/model-registry.js";
 export function registerThinkingTools(
   server: any,
   workspaceRoot: string,
-  geminiClient: GeminiThinkingClient
+  geminiClient: GeminiGenerationClient
 ) {
   const planner = new GeminiPlanner(geminiClient);
   const reviewer = new GeminiReviewer(geminiClient);
@@ -488,7 +488,8 @@ export function registerThinkingTools(
     async () => {
       try {
         const registry = DynamicModelRegistry.getInstance();
-        const cache = registry.loadCache() || await registry.discoverModels(geminiClient.getRawClient() || undefined);
+        const rawClient = (geminiClient as any).getRawClient ? (geminiClient as any).getRawClient() : undefined;
+        const cache = registry.loadCache() || await registry.discoverModels(rawClient);
 
         const lines: string[] = [
           `# Gemini Modern Models Registry (Strictly > 3.0)`,
@@ -543,7 +544,7 @@ export function registerThinkingTools(
     async () => {
       try {
         const registry = DynamicModelRegistry.getInstance();
-        const rawClient = geminiClient.getRawClient();
+        const rawClient = (geminiClient as any).getRawClient ? (geminiClient as any).getRawClient() : null;
         if (!rawClient) {
           return {
             content: [

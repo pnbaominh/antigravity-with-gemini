@@ -1,4 +1,4 @@
-import { GeminiThinkingClient } from "./client.js";
+import type { GeminiGenerationClient } from "./client-interface.js";
 import { RulesEngine } from "../governance/rules-engine.js";
 import { RuleValidationResult } from "../governance/types.js";
 
@@ -32,9 +32,9 @@ export interface RefinedPlanResult extends PlanResult {
 }
 
 export class GeminiPlanner {
-  private client: GeminiThinkingClient;
+  private client: GeminiGenerationClient;
 
-  constructor(client: GeminiThinkingClient) {
+  constructor(client: GeminiGenerationClient) {
     this.client = client;
   }
 

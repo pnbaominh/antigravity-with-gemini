@@ -117,13 +117,14 @@ Antigravity summarizes accomplishments in `walkthrough.md` and reports back to t
 
 ```bash
 g2a setup           # Install skill, run doctor checks, generate initial pairing code
+g2a login-web       # Log in to Google Gemini Web (gemini.google.com) once and save persistent session
 g2a start           # Start the bridge daemon in background
 g2a stop            # Stop the bridge daemon
 g2a status          # Check bridge health, port, and tunnel status
-g2a doctor          # Run environment and permission diagnostics
+g2a doctor          # Run environment and permission diagnostics (verifies Brave/Edge/Chrome)
 g2a pair            # Generate a new 6-digit one-time pairing code
-g2a plan "<task>"   # Request a deep thinking plan from Gemini (Principal Architect)
-g2a web "<task>"    # Copy context & prompt and open Google Gemini Web (gemini.google.com)
+g2a plan "<task>"   # Request a deep thinking plan via Gemini Web Engine (Principal Architect)
+g2a web "<task>"    # Copy context & prompt and open Google Gemini Web manually if desired
 g2a review          # Request an adversarial review of current git diff
 g2a tunnel          # Launch a Cloudflare public quick tunnel
 g2a mcp             # Run G2A MCP server over Stdio for direct Antigravity harness integration

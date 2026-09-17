@@ -2,21 +2,16 @@ import { GoogleGenAI } from "@google/genai";
 import { DEFAULT_GEMINI_MODELS } from "../config/constants.js";
 import { getSavedGeminiApiKey } from "../config/paths.js";
 import { DynamicModelRegistry } from "./model-registry.js";
+import type { GeminiGenerationClient, GenerateOptions, GenerateResult } from "./client-interface.js";
+import { GeminiWebClient } from "../browser/gemini-web-client.js";
 
-export interface GeminiCallOptions {
-  model?: string;
-  thinkingBudget?: number;
-  temperature?: number;
-  systemInstruction?: string;
-}
+export interface GeminiCallOptions extends GenerateOptions {}
 
-export interface GeminiResponse {
-  text: string;
-  model: string;
+export interface GeminiResponse extends GenerateResult {
   thinking?: string;
 }
 
-export class GeminiThinkingClient {
+export class GeminiThinkingClient implements GeminiGenerationClient {
   private client: GoogleGenAI | null = null;
   private apiKey: string | null = null;
 
@@ -162,4 +157,19 @@ export class GeminiThinkingClient {
 
     throw lastError;
   }
+}
+
+/**
+ * Creates the appropriate Gemini client according to configuration.
+ * Prioritizes GeminiWebClient to bypass Studio API quotas unless explicitly set to 'api'.
+ */
+export function createDefaultClient(): GeminiGenerationClient {
+  const engine = (process.env.GEMINI_ENGINE || "web").toLowerCase();
+  if (engine === "api") {
+    const apiClient = new GeminiThinkingClient();
+    if (apiClient.isConfigured()) {
+      return apiClient;
+    }
+  }
+  return new GeminiWebClient();
 }

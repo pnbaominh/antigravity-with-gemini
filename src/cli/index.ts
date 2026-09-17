@@ -4,6 +4,7 @@ import path from "node:path";
 import dotenv from "dotenv";
 import {
   setupCommand,
+  loginWebCommand,
   startCommand,
   stopCommand,
   statusCommand,
@@ -98,6 +99,14 @@ program
   .action(async (taskDescription) => {
     const ws = path.resolve(program.opts().workspace);
     await reviewCommand(ws, taskDescription);
+  });
+
+program
+  .command("login-web")
+  .description("Launch browser to sign in to Google Gemini Web and save persistent session")
+  .action(async () => {
+    const ws = path.resolve(program.opts().workspace);
+    await loginWebCommand(ws);
   });
 
 program

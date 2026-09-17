@@ -6,7 +6,8 @@ import { OAuthServer } from "../auth/oauth.js";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { createG2AMcpServer } from "../mcp/server.js";
 import { McpHttpHandler } from "../mcp/http.js";
-import { GeminiThinkingClient } from "../gemini/client.js";
+import { createDefaultClient, GeminiThinkingClient } from "../gemini/client.js";
+import type { GeminiGenerationClient } from "../gemini/client-interface.js";
 import { GeminiPlanner } from "../gemini/planner.js";
 import { PlanHistoryStore } from "../gemini/history.js";
 import { getGitStatus } from "../workspace/git.js";
@@ -29,7 +30,7 @@ export class BridgeServer {
   private pairingManager: PairingManager;
   private tokenStore: TokenStore;
   private oauthServer: OAuthServer;
-  private geminiClient: GeminiThinkingClient;
+  private geminiClient: GeminiGenerationClient;
   private mcpHttpHandler: McpHttpHandler;
   private workspaceManager: WorkspaceManager;
   private historyStore: PlanHistoryStore;
@@ -43,7 +44,7 @@ export class BridgeServer {
     this.pairingManager = new PairingManager();
     this.tokenStore = new TokenStore(this.workspaceRoot);
     this.oauthServer = new OAuthServer(this.pairingManager, this.tokenStore);
-    this.geminiClient = new GeminiThinkingClient(options.geminiApiKey);
+    this.geminiClient = options.geminiApiKey ? new GeminiThinkingClient(options.geminiApiKey) : createDefaultClient();
 
     const mcpServer = createG2AMcpServer(this.workspaceRoot, {
       geminiClient: this.geminiClient,
@@ -62,7 +63,7 @@ export class BridgeServer {
     return this.tokenStore;
   }
 
-  getGeminiClient(): GeminiThinkingClient {
+  getGeminiClient(): GeminiGenerationClient {
     return this.geminiClient;
   }
 

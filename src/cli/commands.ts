@@ -7,7 +7,8 @@ import { BridgeRuntime } from "../bridge/runtime.js";
 import { BridgeServer } from "../bridge/server.js";
 import { PairingManager } from "../auth/pairing.js";
 import { runDoctorChecks, printDoctorReport } from "./doctor.js";
-import { GeminiThinkingClient } from "../gemini/client.js";
+import { GeminiThinkingClient, createDefaultClient } from "../gemini/client.js";
+import { GeminiWebClient } from "../browser/gemini-web-client.js";
 import { GeminiPlanner } from "../gemini/planner.js";
 import { GeminiReviewer } from "../gemini/reviewer.js";
 import { WorkspaceManager } from "../workspace/manager.js";
@@ -162,9 +163,30 @@ export async function pairCommand(workspaceRoot: string) {
   console.log(pc.dim("Valid for 5 minutes. Enter this code in your Gemini connector settings.\n"));
 }
 
+export async function loginWebCommand(workspaceRoot: string) {
+  console.log(pc.bold("\n🌐 Google Gemini Web Login\n"));
+  const webClient = new GeminiWebClient();
+  try {
+    const executable = webClient.getExecutablePath();
+    console.log(pc.cyan(`Using Chromium Browser: ${executable}`));
+    console.log(pc.dim(`Profile Directory: ${webClient.getUserDataDir()}`));
+
+    await webClient.startInteractiveLogin((msg) => {
+      console.log(pc.yellow(msg));
+    });
+
+    console.log(pc.green("\n✓ Google Gemini Web session established and saved successfully!"));
+    console.log(pc.white("Now you can run `g2a plan` or call `gemini_plan` without any API keys or quota limits.\n"));
+  } catch (err: any) {
+    console.error(pc.red(`\nLogin failed: ${err?.message || err}\n`));
+  } finally {
+    await webClient.close();
+  }
+}
+
 export async function planCommand(workspaceRoot: string, task: string) {
   console.log(pc.bold(`\n🧠 Asking Gemini Thinking to plan for: "${task}"...\n`));
-  const client = new GeminiThinkingClient();
+  const client = createDefaultClient();
   const planner = new GeminiPlanner(client);
   const workspace = new WorkspaceManager(workspaceRoot);
 
@@ -183,7 +205,7 @@ export async function planCommand(workspaceRoot: string, task: string) {
     historyStore.savePlan({
       task,
       source: "cli",
-      model: DEFAULT_GEMINI_MODELS.THINKING,
+      model: "gemini-web",
       title: plan.title,
       summary: plan.summary,
       phases: plan.phases,
@@ -194,12 +216,16 @@ export async function planCommand(workspaceRoot: string, task: string) {
     console.log();
   } catch (err: any) {
     console.error(pc.red(`Planning failed: ${err?.message || err}`));
+  } finally {
+    if ((client as any).close) {
+      await (client as any).close();
+    }
   }
 }
 
 export async function reviewCommand(workspaceRoot: string, taskDescription?: string) {
   console.log(pc.bold("\n🔍 Asking Gemini to review current git diff...\n"));
-  const client = new GeminiThinkingClient();
+  const client = createDefaultClient();
   const reviewer = new GeminiReviewer(client);
 
   const diff = getGitDiff(workspaceRoot);
@@ -217,6 +243,10 @@ export async function reviewCommand(workspaceRoot: string, taskDescription?: str
     console.log();
   } catch (err: any) {
     console.error(pc.red(`Review failed: ${err?.message || err}`));
+  } finally {
+    if ((client as any).close) {
+      await (client as any).close();
+    }
   }
 }
 

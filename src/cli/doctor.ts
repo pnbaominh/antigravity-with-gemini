@@ -4,6 +4,7 @@ import pc from "picocolors";
 import { getGitStatus } from "../workspace/git.js";
 import { getStateDirectory, getSavedGeminiApiKey } from "../config/paths.js";
 import { BridgeRuntime } from "../bridge/runtime.js";
+import { BrowserDetector } from "../browser/detector.js";
 
 export interface DoctorCheck {
   name: string;
@@ -68,21 +69,30 @@ export async function runDoctorChecks(workspaceRoot: string): Promise<DoctorChec
     });
   }
 
-  // 4. Gemini API Key
+  // 4. Gemini Engine (Web Automation vs API)
+  const detectedBrowser = BrowserDetector.findBrowser();
+  if (detectedBrowser) {
+    checks.push({
+      name: "Gemini Web Engine",
+      ok: true,
+      message: `Chromium Browser detected (${detectedBrowser.name}: ${detectedBrowser.executablePath})`,
+    });
+  } else {
+    checks.push({
+      name: "Gemini Web Engine",
+      ok: false,
+      message: "No Chromium browser found (Brave, Chrome, Edge).",
+      fixSuggestion: "Install Brave or Google Chrome to use Gemini Web Automation without API keys.",
+    });
+  }
+
   const apiKey = getSavedGeminiApiKey();
   if (apiKey) {
     const masked = apiKey.slice(0, 4) + "..." + apiKey.slice(-4);
     checks.push({
-      name: "Gemini API Key",
+      name: "Gemini API Key (Optional Fallback)",
       ok: true,
       message: `Configured (${masked})`,
-    });
-  } else {
-    checks.push({
-      name: "Gemini API Key",
-      ok: true, // Warning
-      message: "GEMINI_API_KEY not set in environment (required for in-harness direct thinking/planning).",
-      fixSuggestion: "Get a free API key at https://aistudio.google.com and set GEMINI_API_KEY=<your_key>.",
     });
   }
 

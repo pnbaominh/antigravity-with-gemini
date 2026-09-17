@@ -4,12 +4,13 @@ import { WorkspaceManager } from "../workspace/manager.js";
 import { getGitStatus, getGitDiff } from "../workspace/git.js";
 import { searchWorkspace } from "../workspace/search.js";
 import { getExecutionSummary, getExecutionOutput, getTestStatus } from "../execution/output.js";
-import { GeminiThinkingClient } from "../gemini/client.js";
+import { createDefaultClient, GeminiThinkingClient } from "../gemini/client.js";
+import type { GeminiGenerationClient } from "../gemini/client-interface.js";
 import { registerThinkingTools } from "./thinking-tools.js";
 
 export function createG2AMcpServer(
   workspaceRoot: string,
-  options: { geminiClient?: GeminiThinkingClient } = {}
+  options: { geminiClient?: GeminiGenerationClient } = {}
 ): McpServer {
   const server = new McpServer({
     name: "antigravity-with-gemini",
@@ -260,7 +261,7 @@ export function createG2AMcpServer(
   );
 
   // Always register Gemini thinking tools (gemini_plan, gemini_review, gemini_think)
-  const geminiClient = options.geminiClient ?? new GeminiThinkingClient();
+  const geminiClient = options.geminiClient ?? createDefaultClient();
   registerThinkingTools(server, workspaceRoot, geminiClient);
 
   return server;
