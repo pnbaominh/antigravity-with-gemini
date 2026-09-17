@@ -79,7 +79,13 @@ export class GeminiThinkingClient {
       config.temperature = options.temperature;
     }
 
-    const fallbackModels = [modelName, DEFAULT_GEMINI_MODELS.FAST, "gemini-3.8-flash"].filter(
+    const fallbackModels = [
+      modelName,
+      DEFAULT_GEMINI_MODELS.FAST,
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-3.8-flash",
+    ].filter(
       (m, idx, arr) => arr.indexOf(m) === idx
     );
 
