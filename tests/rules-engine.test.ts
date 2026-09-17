@@ -135,4 +135,86 @@ describe('RulesEngine', () => {
     expect(result.violations.some((v) => v.includes('Binary AC rule'))).toBe(true);
     expect(result.violations.some((v) => v.includes('RAID Log invariant violated'))).toBe(true);
   });
+
+  it('should parse and validate a compliant RULES.MD markdown document', () => {
+    const compliantMarkdown = `# Plan: Core Governance Engine
+DRI: @lead_architect
+
+## 1. AS-IS State & Evidence Grounding
+- \`package.json\`: Workspace root descriptor with vitest configured
+- \`RULES.md\`: Technical governance specification
+
+## 2. Non-Goals & Scope Boundaries (Mandatory >= 3)
+- No migration of legacy tests to Jest
+- No external web dashboard UI implementation
+- No modification of Gemini API auth credentials flow
+
+## 3. Unknowns & Halt Checks
+- Status: CLEAR
+- Unknowns: None
+
+## 4. Pre-Mortem & RAID Log
+| ID | Category | Description | Impact | Likelihood | Mitigation | Owner DRI |
+| RAID-1 | Risk | Windows CRLF causing test diff mismatch | High | Medium | Force LF in git attributes | @lead_architect |
+
+## 5. Work Breakdown Structure (WBS) & Phased Implementation
+### Phase 1: Foundation Parser
+- [ ] Task 1.1: Implement markdown parser for governance schema
+- [ ] Task 1.2: Add unit tests for parser
+**Verification:** npm test tests/rules-engine.test.ts
+PERT: O=1, M=2, P=3
+
+## 6. Definition of Done & Acceptance Criteria
+- 100% test pass rate
+- Zero build errors
+`;
+
+    const parsed = RulesEngine.parseMarkdownPlan(compliantMarkdown);
+    expect(parsed.title).toBe('Core Governance Engine');
+    expect(parsed.dri).toBe('@lead_architect');
+    expect(parsed.asIsEvidence).toHaveLength(2);
+    expect(parsed.nonGoals).toHaveLength(3);
+    expect(parsed.haltOnUnknownTriggered).toBe(false);
+    expect(parsed.raidLog).toHaveLength(1);
+    expect(parsed.wbsNodes.length).toBeGreaterThanOrEqual(1);
+
+    const validation = RulesEngine.validateMarkdownPlan(compliantMarkdown, process.cwd());
+    expect(validation.valid).toBe(true);
+    expect(validation.violations).toHaveLength(0);
+    expect(validation.haltRequired).toBe(false);
+  });
+
+  it('should trigger Halt-on-Unknown when markdown declares unknown parameters', () => {
+    const markdownWithHalt = `# Plan: Production Deployment
+DRI: @devops
+
+## 1. AS-IS State & Evidence Grounding
+- \`package.json\`: Project manifest
+
+## 2. Non-Goals & Scope Boundaries
+- No frontend rebuild
+- No rollback pipeline
+- No staging environment
+
+## 3. Unknowns & Halt Checks
+- Status: HALT
+- Missing AWS production KMS key ARN
+- Database connection password not provisioned in vault
+
+## 4. Pre-Mortem & RAID Log
+| ID | Category | Description | Impact | Likelihood | Mitigation | Owner DRI |
+| R-1 | Risk | Secret leak | High | Low | Use vault | @devops |
+
+## 5. Phased Implementation Plan
+### Phase 1: Deploy
+- [ ] Task 1.1: Execute deploy script
+**Verification:** npm run verify
+`;
+
+    const validation = RulesEngine.validateMarkdownPlan(markdownWithHalt);
+    expect(validation.valid).toBe(false);
+    expect(validation.haltRequired).toBe(true);
+    expect(validation.violations[0]).toContain('Halt-on-Unknown triggered');
+  });
 });
+

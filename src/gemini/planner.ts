@@ -1,4 +1,6 @@
 import { GeminiThinkingClient } from "./client.js";
+import { RulesEngine } from "../governance/rules-engine.js";
+import { RuleValidationResult } from "../governance/types.js";
 
 export interface PlanResult {
   title: string;
@@ -25,6 +27,8 @@ export interface RefinedPlanResult extends PlanResult {
   audit?: PlanReviewAudit;
   compactMarkdown: string;
   tokenReductionPercent: number;
+  governance?: RuleValidationResult;
+  haltOnUnknown?: boolean;
 }
 
 export class GeminiPlanner {
@@ -40,63 +44,69 @@ export class GeminiPlanner {
     gitStatus?: string;
     additionalContext?: string;
     skipReview?: boolean;
+    workspaceRoot?: string;
   }): Promise<RefinedPlanResult> {
     const systemInstruction = `You are an elite Principal Software Architect and Lead Engineering Planner pairing with Antigravity (Advanced Agentic Coding Agent).
 Your purpose is: "Gemini Thinks. Antigravity Works."
-Antigravity owns autonomous execution: writing files, running shell commands, executing test suites, and git operations.
-You own high-level architectural strategy, trade-off evaluation, edge-case anticipation, and phased action plans.
+You operate under the strict RULES.MD Technical Governance Framework:
+1. Invariant Axioms: Plan-Before-Execute, Evidence-Based Grounding, Scope Discipline, Halt-on-Unknown.
+2. Scope Control: Mandatory >= 3 explicit Non-Goals.
+3. Pre-Mortem & Accountability: RAID log and Single Directly Responsible Individual (DRI) per task.
+4. Estimation & Discipline: 8/80 hour duration rule, PERT statistical estimation (E = (O + 4M + P)/6, Sigma = (P - O)/6).
+5. Binary Acceptance Criteria: Objective pass/fail tests and commands, zero subjective qualifiers.
 
-CRITICAL INSTRUCTIONS FOR AN EXPERT PLAN:
-1. No hand-waving or vague bullet points. Every file path, interface, type signature, and command must be explicit and drop-in ready.
-2. Anticipate subtle production bugs before a single line of code is written (race conditions, memory leaks, timeout cascades, platform differences like Windows CRLF/backslashes vs POSIX, rate limiting, and security boundaries).
-3. Deconstruct every task into sequenced, atomic phases where every phase has an objective, runnable verification command.
-4. Keep the output strictly in structured, GitHub-flavored Markdown following this exact blueprint:
+CRITICAL INSTRUCTIONS FOR A RULES.MD COMPLIANT PLAN:
+1. Keep the output strictly in structured, GitHub-flavored Markdown following this exact 6-section blueprint:
 
 # Plan: [Concise, High-Impact Architecture Title]
+DRI: [Single DRI name or role, e.g. @lead_architect]
 
-## 1. Executive Summary & Architecture Strategy
-- **Core Approach**: High-level technical architecture and primary design pattern chosen (e.g. Hexagonal, Strategy, Event-Driven, CQRS, Middleware Pipeline).
-- **Trade-Offs & Alternatives Evaluated**: Concrete comparison between Option A and Option B (pros/cons) and why this approach was selected.
-- **Blast Radius & Impact Analysis**: Exact components, files, external dependencies, API contracts, and database/storage states touched or altered.
-- **Data Flow & State Lifecycle**: Tracing data journey from input/trigger -> validation -> transformation -> state storage -> response/invalidation.
+## 1. AS-IS State & Evidence Grounding
+Ground the plan in actual workspace reality. Reference existing files using backticks and note observed states:
+- \`relative/path/to/existing/file.ts\`: [Current architecture, exported symbols, observed patterns]
 
-## 2. File-by-File Technical Specification
-For every file involved in this plan, specify using explicit demarcation tags:
-- \`[NEW] relative/path/to/file.ts\`: Purpose, exported interfaces/types/functions, schema definitions, and key algorithms.
-- \`[MODIFY] relative/path/to/file.ts\`: Specific functions/classes modified, before/after behavioral delta, breaking change analysis.
-- \`[DELETE] relative/path/to/file.ts\`: Rationale for deletion and migration path for any callers.
-- \`[TEST] tests/path/to/file.test.ts\`: Dedicated test suite, mock boundaries, edge-case assertions.
+## 2. Non-Goals & Scope Boundaries (Mandatory >= 3)
+Explicitly list at least 3 distinct things that are strictly OUT OF SCOPE to prevent scope creep:
+1. [Out of scope item 1]
+2. [Out of scope item 2]
+3. [Out of scope item 3]
 
-## 3. Deep Technical Traps, Edge Cases & Guardrails
-- **Concurrency & Race Conditions**: Thread/process safety, async locks, mutexes, debounce, idempotent operations.
-- **Resilience & Failure Modes**: Network dropouts, 429/503 rate limits, exponential backoff with jitter, retry budgets, circuit breakers.
-- **Platform & Runtime Quirks**: Cross-platform differences (Windows cmd.exe/PowerShell vs POSIX shell, CRLF line endings, path separators, file locking, signal handling).
-- **Security & Boundary Validation**: Secret leaks/masking, path traversal protection, input sanitization, zero-trust parameter validation.
-- **Backward Compatibility**: API contract preservation, non-breaking migrations, legacy client fallback.
+## 3. Unknowns & Halt Checks (Halt-on-Unknown Protocol)
+- Status: [CLEAR | HALT]
+- Unknowns: [None | List specific unverified credentials, endpoints, or dependencies that require user input]
+(NOTE: If any critical production credentials or ambiguous architectural dependencies are missing, declare Status: HALT and do NOT guess or synthesize fake tokens).
 
-## 4. Phased Implementation Plan
-Break down the implementation into sequenced, dependency-ordered phases. Each phase must be discrete and verifiable:
+## 4. Pre-Mortem & RAID Log
+| ID | Category | Description | Impact | Likelihood | Mitigation | Owner DRI |
+| R-1 | Risk | [Technical risk, concurrency, race condition, platform CRLF] | High | Medium | [Concrete mitigation] | [@dri] |
+| A-1 | Assumption | [Key technical assumption] | Medium | Low | [Validation step] | [@dri] |
+| D-1 | Dependency | [Internal or external dependency] | High | Low | [Graceful fallback] | [@dri] |
+
+## 5. Work Breakdown Structure (WBS) & Phased Implementation
+Break down into sequenced, dependency-ordered phases. Every phase must have atomic tasks, single DRI, PERT estimates, and runnable binary verification commands:
 
 ### Phase 1: [Foundation & Scaffolding / Phase Name]
-- [ ] Task 1.1: [Specific, atomic implementation task specifying file and exact logic]
-- [ ] Task 1.2: [Specific, atomic implementation task specifying file and exact logic]
-**Verification:** [Concrete, runnable shell command or test assertion, e.g., \`npm test tests/foundation.test.ts\`]
+- [ ] Task 1.1: [Atomic implementation task specifying exact file and logic] (DRI: @dri)
+- [ ] Task 1.2: [Atomic implementation task specifying exact file and logic] (DRI: @dri)
+**Verification:** [Concrete, runnable shell command, e.g. \`npm test tests/foundation.test.ts\`]
+PERT: O=[hours], M=[hours], P=[hours]
 
 ### Phase 2: [Core Domain Logic / Phase Name]
-- [ ] Task 2.1: [Specific, atomic implementation task specifying file and exact logic]
-- [ ] Task 2.2: [Specific, atomic implementation task specifying file and exact logic]
-**Verification:** [Concrete, runnable shell command or test assertion]
+- [ ] Task 2.1: [Atomic task] (DRI: @dri)
+- [ ] Task 2.2: [Atomic task] (DRI: @dri)
+**Verification:** [Concrete, runnable shell command]
+PERT: O=[hours], M=[hours], P=[hours]
 
-### Phase 3: [Integration & Edge Cases / Phase Name]
-- [ ] Task 3.1: [Specific, atomic implementation task specifying file and exact logic]
-- [ ] Task 3.2: [Specific, atomic implementation task specifying file and exact logic]
-**Verification:** [Concrete, runnable shell command or test assertion]
+### Phase 3: [Integration & Traps Hardening / Phase Name]
+- [ ] Task 3.1: [Atomic task] (DRI: @dri)
+- [ ] Task 3.2: [Atomic task] (DRI: @dri)
+**Verification:** [Concrete, runnable shell command]
+PERT: O=[hours], M=[hours], P=[hours]
 
-## 5. Acceptance Criteria & Quality Gates
-- **Automated Tests**: Specific unit/integration suites and boundary cases that must pass 100%.
-- **Type Safety & Build**: Zero TypeScript errors (\`npm run build\`), strict null checks, no untyped \`any\` bypasses.
-- **Zero Regressions**: All existing test suites continue passing with 0 errors.
-- **Observability**: Structured logs, meaningful diagnostics, and actionable error messages.`;
+## 6. Definition of Done & Quality Gates
+- **Automated Tests**: Specific unit/integration suites that must pass 100% (Binary Pass/Fail).
+- **Type Safety & Build**: Zero TypeScript errors (\`npm run build\`), strict null checks.
+- **Zero Regressions**: All existing test suites pass with 0 errors.`;
 
     const prompt = `Task requested by user:
 ${params.task}
@@ -107,7 +117,7 @@ ${params.workspaceSummary}
 ${params.gitStatus ? `Git Status:\n${params.gitStatus}\n` : ""}
 ${params.additionalContext ? `Context:\n${params.additionalContext}\n` : ""}
 
-Formulate a production-grade, Principal Architect implementation plan following the 5-section specification. Think deeply through architectural trade-offs, potential edge-case traps, exact file specifications, and atomic verification gates.`;
+Formulate a production-grade implementation plan strictly compliant with the RULES.MD 6-section governance specification. Ensure Evidence Grounding (AS-IS), Non-Goals (>= 3), Halt-on-Unknown check, RAID log, Single DRI, PERT estimates, and binary verification gates.`;
 
     // 1. Generate initial draft plan
     const draftResponse = await this.client.generate(prompt, {
@@ -120,7 +130,8 @@ Formulate a production-grade, Principal Architect implementation plan following 
     // If review is skipped (e.g. for lightweight tests)
     if (params.skipReview) {
       const parsed = this.parsePlanOutput(draftMarkdown);
-      const compactMarkdown = this.generateCompactPlan(parsed);
+      const governance = RulesEngine.validateMarkdownPlan(draftMarkdown, params.workspaceRoot);
+      const compactMarkdown = this.generateCompactPlan(parsed, undefined, governance);
       const tokenReductionPercent = Math.max(
         0,
         Math.round((1 - compactMarkdown.length / (draftMarkdown.length || 1)) * 100)
@@ -129,6 +140,8 @@ Formulate a production-grade, Principal Architect implementation plan following 
         ...parsed,
         compactMarkdown,
         tokenReductionPercent,
+        governance,
+        haltOnUnknown: governance.haltRequired,
       };
     }
 
@@ -153,7 +166,8 @@ Formulate a production-grade, Principal Architect implementation plan following 
     }
 
     const parsedFinal = this.parsePlanOutput(finalMarkdown);
-    const compactMarkdown = this.generateCompactPlan(parsedFinal, audit);
+    const governance = RulesEngine.validateMarkdownPlan(finalMarkdown, params.workspaceRoot);
+    const compactMarkdown = this.generateCompactPlan(parsedFinal, audit, governance);
     const tokenReductionPercent = Math.max(
       0,
       Math.round((1 - compactMarkdown.length / (finalMarkdown.length || 1)) * 100)
@@ -165,6 +179,8 @@ Formulate a production-grade, Principal Architect implementation plan following 
       audit,
       compactMarkdown,
       tokenReductionPercent,
+      governance,
+      haltOnUnknown: governance.haltRequired,
     };
   }
 
@@ -306,11 +322,11 @@ INSTRUCTIONS FOR SELF-CORRECTION:
   }
 
   private parsePlanOutput(rawMarkdown: string): PlanResult {
-    const titleMatch = rawMarkdown.match(/^# Plan:\s*(.+)$/m);
+    const titleMatch = rawMarkdown.match(/^# (?:Plan:\s*)?(.+)$/m);
     const title = titleMatch ? titleMatch[1].trim() : "Implementation Plan";
 
     const execSummaryMatch = rawMarkdown.match(
-      /## (?:1\.\s*)?Executive Summary[^\n]*\n([\s\S]*?)(?=(?:\n##|\n###))/i
+      /## [^\n]*(?:Executive Summary|Summary|AS-IS)[^\n]*\n([\s\S]*?)(?=(?:\n##|\n###))/i
     );
     const summary = execSummaryMatch ? execSummaryMatch[1].trim() : rawMarkdown.slice(0, 300) + "...";
 
@@ -355,14 +371,26 @@ INSTRUCTIONS FOR SELF-CORRECTION:
    * Generates a compact, high-density actionable plan for Antigravity MCP.
    * Omits lengthy philosophical text to protect Antigravity's context window and token budget.
    */
-  generateCompactPlan(plan: PlanResult, audit?: PlanReviewAudit): string {
+  generateCompactPlan(
+    plan: PlanResult,
+    audit?: PlanReviewAudit,
+    governance?: RuleValidationResult
+  ): string {
     const scoreBadge = audit
       ? `🛡️ **Gemini Architect Score:** ${audit.score}/100 (${audit.verdict === "REFINED" ? "Self-Corrected & Optimized" : "Approved"})`
       : `🛡️ **Gemini Architect Verified**`;
 
+    const govBadge = governance
+      ? (governance.haltRequired
+          ? `🛑 **RULES.MD Status:** HALT ON UNKNOWN (${governance.violations.length} item(s) require clarification)`
+          : governance.valid
+          ? `📋 **RULES.MD Governance:** Verified & Compliant ✓`
+          : `⚠️ **RULES.MD Invariants:** ${governance.violations.length} violation(s) detected`)
+      : `📋 **RULES.MD Governance:** Active`;
+
     const lines: string[] = [
       `# ${plan.title}`,
-      `> ${scoreBadge}`,
+      `> ${scoreBadge} | ${govBadge}`,
       ``,
       `### Executive Summary`,
       plan.summary.split("\n\n")[0] || plan.summary.slice(0, 250),
@@ -388,6 +416,14 @@ INSTRUCTIONS FOR SELF-CORRECTION:
       lines.push(``);
     }
 
+    if (governance && !governance.valid) {
+      lines.push(`### Governance Warnings`);
+      for (const v of governance.violations.slice(0, 3)) {
+        lines.push(`- ⚠️ ${v}`);
+      }
+      lines.push(``);
+    }
+
     lines.push(`> 📁 *Full architectural specification & analysis stored in workspace state.*`);
     return lines.join("\n");
   }
@@ -403,16 +439,24 @@ INSTRUCTIONS FOR SELF-CORRECTION:
     totalPhases: number;
     auditScore?: number;
     auditVerdict?: string;
+    governanceValid?: boolean;
+    violationsCount?: number;
+    haltRequired?: boolean;
   }): string {
+    const status = params.haltRequired ? "HALT" : "READY";
     const payload = {
-      status: "READY",
+      status,
       planId: params.planId,
       title: params.title,
       score: params.auditScore ?? 90,
       verdict: params.auditVerdict ?? "APPROVED",
+      rulesMdCompliance: params.governanceValid !== false ? "COMPLIANT" : "VIOLATIONS_DETECTED",
+      violationsCount: params.violationsCount ?? 0,
       totalPhases: params.totalPhases,
       artifactFile: params.artifactPath.replace(/\\/g, "/"),
-      instruction: `Plan saved to disk with zero Antigravity context bloat. Fetch Phase 1 using gemini_get_phase({ phaseIndex: 1 }).`,
+      instruction: params.haltRequired
+        ? `Halt-on-Unknown triggered: Clarification required on unverified dependencies before execution.`
+        : `Plan saved to disk with zero Antigravity context bloat. Fetch Phase 1 using gemini_get_phase({ phaseIndex: 1 }).`,
     };
     return JSON.stringify(payload, null, 2);
   }

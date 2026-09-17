@@ -176,13 +176,42 @@ export const TOOL_SCHEMAS: Record<string, any> = {
       additionalProperties: false,
     },
   },
+  gemini_validate_plan: {
+    name: "gemini_validate_plan",
+    description: "Validate an implementation plan against the RULES.MD technical governance framework (Non-Goals >= 3, AS-IS Evidence, Single DRI, PERT math, RAID log, Halt-on-Unknown).",
+    parameters: {
+      type: "object",
+      properties: {
+        planMarkdown: { type: "string", description: "Markdown content of plan to validate. If omitted, validates active plan." },
+        planId: { type: "string", description: "Optional specific plan ID to validate from history" },
+      },
+      additionalProperties: false,
+    },
+  },
+  gemini_calculate_pert: {
+    name: "gemini_calculate_pert",
+    description: "Calculate statistical PERT estimate (Expected Hours E and Standard Deviation Sigma) using formula E = (O + 4M + P) / 6 and Sigma = (P - O) / 6.",
+    parameters: {
+      type: "object",
+      properties: {
+        optimistic: { type: "number", description: "Optimistic duration in hours (O)" },
+        mostLikely: { type: "number", description: "Most likely duration in hours (M)" },
+        pessimistic: { type: "number", description: "Pessimistic duration in hours (P)" },
+      },
+      required: ["optimistic", "mostLikely", "pessimistic"],
+      additionalProperties: false,
+    },
+  },
 };
 
 export const MCP_INSTRUCTIONS = `Antigravity with Gemini (G2A) MCP Server.
 Gemini acts as the planning and thinking brain, while Antigravity acts as the execution harness.
+All plans strictly adhere to the RULES.MD Technical Governance Framework.
 Use gemini_plan to formulate structured, phased plans. It returns a lightweight zero-token pointer ticket (<50 tokens).
 Use gemini_get_phase(phaseIndex) to fetch tasks JIT on-demand when starting each phase to protect Antigravity's context window.
 Use gemini_active_plan to inspect the active plan's progress and file artifact on disk.
+Use gemini_validate_plan to verify plan compliance against RULES.MD axioms (Non-Goals >= 3, AS-IS Grounding, Single DRI, PERT math).
+Use gemini_calculate_pert to compute statistical estimates (E and Sigma).
 Use gemini_review to perform independent adversarial code reviews on git diffs.
 Use gemini_think to reason about architectural dilemmas, complex bugs, or tradeoffs.
 Use workspace inspection tools (workspace_info, list_directory, read_file, search_workspace, git_status, git_diff) for safe, read-only context retrieval.`;

@@ -7,6 +7,7 @@ import { getGitDiff, getGitStatus } from "../workspace/git.js";
 import { getExecutionSummary, getTestStatus } from "../execution/output.js";
 import { PlanHistoryStore } from "../gemini/history.js";
 import { DEFAULT_GEMINI_MODELS } from "../config/constants.js";
+import { RulesEngine } from "../governance/rules-engine.js";
 
 export function registerThinkingTools(
   server: any,
@@ -57,6 +58,7 @@ export function registerThinkingTools(
           workspaceSummary,
           gitStatus: gitStatus.summary,
           additionalContext,
+          workspaceRoot,
         });
 
         const stored = historyStore.savePlan({
@@ -94,6 +96,9 @@ export function registerThinkingTools(
             totalPhases: plan.phases.length,
             auditScore: plan.audit?.score,
             auditVerdict: plan.audit?.verdict,
+            governanceValid: plan.governance?.valid,
+            violationsCount: plan.governance?.violations.length,
+            haltRequired: plan.governance?.haltRequired,
           });
         }
 
@@ -333,6 +338,141 @@ export function registerThinkingTools(
             {
               type: "text",
               text: `Gemini thinking failed: ${error?.message || String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "gemini_validate_plan",
+    "Validate an implementation plan against the RULES.MD technical governance framework (Non-Goals >= 3, AS-IS Evidence, Single DRI, PERT math, RAID log, Halt-on-Unknown).",
+    {
+      planMarkdown: z
+        .string()
+        .optional()
+        .describe("Markdown text of the plan to validate. If omitted, validates the active workspace plan."),
+      planId: z
+        .string()
+        .optional()
+        .describe("Optional specific plan ID to validate from workspace history."),
+    },
+    async ({ planMarkdown, planId }: { planMarkdown?: string; planId?: string }) => {
+      try {
+        let markdownToValidate = planMarkdown;
+        if (!markdownToValidate) {
+          const plan = planId ? historyStore.getPlanById(planId) : historyStore.getActivePlan();
+          if (!plan) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "No active plan found to validate. Please provide `planMarkdown` or run `gemini_plan` first.",
+                },
+              ],
+            };
+          }
+          markdownToValidate = plan.rawMarkdown;
+        }
+
+        const result = RulesEngine.validateMarkdownPlan(markdownToValidate, workspaceRoot);
+
+        const statusText = result.haltRequired
+          ? "🛑 HALT ON UNKNOWN REQUIRED"
+          : result.valid
+          ? "✅ RULES.MD COMPLIANT"
+          : "⚠️ GOVERNANCE VIOLATIONS DETECTED";
+
+        const lines: string[] = [
+          `# Plan Governance Validation Report: ${statusText}`,
+          `- **Validation Result:** ${result.valid ? "PASSED (100% Invariants Satisfied)" : "FAILED"}`,
+          `- **Halt-on-Unknown Status:** ${result.haltRequired ? "HALT REQUIRED (Clarification needed before code generation)" : "CLEAR"}`,
+          `- **Violations Count:** ${result.violations.length}`,
+        ];
+
+        if (result.violations.length > 0) {
+          lines.push(``, `## Violations to Correct:`);
+          for (const v of result.violations) {
+            lines.push(`- ❌ ${v}`);
+          }
+        } else {
+          lines.push(``, `> All RULES.MD invariant axioms (AS-IS Grounding, Non-Goals >= 3, Single DRI, PERT math, RAID log) verified successfully.`);
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: lines.join("\n"),
+            },
+          ],
+        };
+      } catch (error: any) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Plan validation failed: ${error?.message || String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "gemini_calculate_pert",
+    "Calculate statistical PERT estimate (Expected Hours E and Standard Deviation Sigma) using formula E = (O + 4M + P) / 6 and Sigma = (P - O) / 6.",
+    {
+      optimistic: z.number().min(0).describe("Optimistic duration in hours (O)"),
+      mostLikely: z.number().min(0).describe("Most likely duration in hours (M)"),
+      pessimistic: z.number().min(0).describe("Pessimistic duration in hours (P)"),
+    },
+    async ({
+      optimistic,
+      mostLikely,
+      pessimistic,
+    }: {
+      optimistic: number;
+      mostLikely: number;
+      pessimistic: number;
+    }) => {
+      try {
+        const estimate = RulesEngine.calculatePERT(optimistic, mostLikely, pessimistic);
+        const low68 = Math.max(0, Number((estimate.expectedHours - estimate.sigmaHours).toFixed(2)));
+        const high68 = Number((estimate.expectedHours + estimate.sigmaHours).toFixed(2));
+        const low95 = Math.max(0, Number((estimate.expectedHours - 2 * estimate.sigmaHours).toFixed(2)));
+        const high95 = Number((estimate.expectedHours + 2 * estimate.sigmaHours).toFixed(2));
+
+        const text = [
+          `# PERT Statistical Estimate`,
+          `- **Optimistic (O):** ${estimate.optimisticHours}h`,
+          `- **Most Likely (M):** ${estimate.mostLikelyHours}h`,
+          `- **Pessimistic (P):** ${estimate.pessimisticHours}h`,
+          `- **Expected Duration (E):** **${estimate.expectedHours} hours** (Formula: \`(O + 4M + P) / 6\`)`,
+          `- **Standard Deviation (σ):** **${estimate.sigmaHours} hours** (Formula: \`(P - O) / 6\`)`,
+          `- **68% Confidence Interval (1σ):** [${low68}h, ${high68}h]`,
+          `- **95% Confidence Interval (2σ):** [${low95}h, ${high95}h]`,
+          `- **8/80 Rule Compliance:** ${estimate.expectedHours >= 0.5 && estimate.expectedHours <= 80 ? "Compliant ✓" : "Out of bounds (must be 0.5h - 80h) ⚠️"}`,
+        ].join("\n");
+
+        return {
+          content: [
+            {
+              type: "text",
+              text,
+            },
+          ],
+        };
+      } catch (error: any) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `PERT calculation failed: ${error?.message || String(error)}`,
             },
           ],
         };

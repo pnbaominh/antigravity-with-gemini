@@ -4,41 +4,47 @@ import { GeminiThinkingClient } from "../src/gemini/client.js";
 
 describe("GeminiPlanner", () => {
   const sampleArchitectPlan = `# Plan: Distributed Redis Cache with TTL Invalidation
+DRI: @lead_architect
 
-## 1. Executive Summary & Architecture Strategy
-- **Core Approach**: Implement a two-tier cache with local in-memory L1 (LRU) and distributed Redis L2.
-- **Trade-Offs & Alternatives Evaluated**: Evaluated Option A (direct Redis only) vs Option B (two-tier L1+L2). Option B minimizes Redis roundtrip latency.
-- **Blast Radius & Impact Analysis**: Touches cache layer and data store repositories. No breaking API changes to downstream services.
-- **Data Flow & State Lifecycle**: Read requests check L1 -> check L2 -> load from DB -> write back L2 and L1.
+## 1. Executive Summary & AS-IS Grounding
+Implement a two-tier cache with local in-memory L1 and distributed Redis L2.
+- \`package.json\`: Workspace descriptor with vitest
+- \`src/cache/types.ts\`: Initial cache interfaces
 
-## 2. File-by-File Technical Specification
-- \`[NEW] src/cache/redis.ts\`: Redis client wrapper with connection pooling.
-- \`[NEW] src/cache/tier.ts\`: Multi-tier orchestrator.
-- \`[TEST] tests/cache.test.ts\`: Unit tests with mock Redis.
+## 2. Non-Goals & Scope Boundaries (Mandatory >= 3)
+1. No migration of relational database tables
+2. No rewrite of user authentication layer
+3. No GraphQL subscription caching
 
-## 3. Deep Technical Traps, Edge Cases & Guardrails
-- **Concurrency & Race Conditions**: Mutex locks on cache stampede.
-- **Resilience & Failure Modes**: Redis connection fallback to L1 cache if down.
-- **Platform & Runtime Quirks**: Cross-platform support for Redis URLs.
+## 3. Unknowns & Halt Checks
+- Status: CLEAR
+- Unknowns: None
 
-## 4. Phased Implementation Plan
+## 4. Pre-Mortem & RAID Log
+| ID | Category | Description | Impact | Likelihood | Mitigation | Owner DRI |
+| R-1 | Risk | Cache stampede on expired keys | High | Medium | Implement mutex lock | @lead_architect |
+
+## 5. Work Breakdown Structure (WBS) & Phased Implementation
 
 ### Phase 1: Foundation & Cache Interfaces
 - [ ] Task 1.1: Create ICacheProvider interface in src/cache/types.ts
 - [ ] Task 1.2: Implement InMemoryCache provider for L1 cache
 **Verification:** npm test tests/cache-types.test.ts
+PERT: O=2, M=4, P=6
 
 ### Phase 2: Distributed Redis Provider
 - [ ] Task 2.1: Implement RedisCache provider with TTL support in src/cache/redis.ts
 - [ ] Task 2.2: Add auto-reconnect and circuit breaker logic
 **Verification:** npm test tests/redis.test.ts
+PERT: O=3, M=6, P=9
 
 ### Phase 3: Integration & Invalidation Bus
 - [ ] Task 3.1: Connect Redis PubSub for cross-node L1 invalidation
 - [ ] Task 3.2: Verify zero cache stampede on expired keys
 **Verification:** npm test tests/invalidation.test.ts
+PERT: O=2, M=4, P=6
 
-## 5. Acceptance Criteria & Quality Gates
+## 6. Acceptance Criteria & Quality Gates
 - [ ] 100% test coverage on cache module
 - [ ] Zero TypeScript compilation errors
 - [ ] Fallback graceful degradation when Redis is offline`;
@@ -109,12 +115,14 @@ describe("GeminiPlanner", () => {
     expect(result.phases).toHaveLength(3);
     expect(result.compactMarkdown).toBeDefined();
     expect(result.compactMarkdown.length).toBeLessThan(result.rawMarkdown.length);
-    expect(result.tokenReductionPercent).toBeGreaterThan(25);
+    expect(result.governance).toBeDefined();
+    expect(result.governance?.valid).toBe(true);
+    expect(result.haltOnUnknown).toBe(false);
     expect(mockClient.generate).toHaveBeenCalledWith(
       expect.stringContaining("Build distributed Redis cache"),
       expect.objectContaining({
         thinkingBudget: 4096,
-        systemInstruction: expect.stringContaining("Principal Software Architect"),
+        systemInstruction: expect.stringContaining("RULES.MD"),
       })
     );
   });
