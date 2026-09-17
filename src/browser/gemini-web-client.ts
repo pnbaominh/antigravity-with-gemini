@@ -96,13 +96,18 @@ export class GeminiWebClient implements GeminiGenerationClient {
   public async isUserAuthenticated(): Promise<boolean> {
     if (!this.page || this.page.isClosed()) return false;
     const url = this.page.url();
-    if (url.includes("accounts.google.com") || url.includes("/signin")) {
+    if (
+      url.includes("accounts.google.com") ||
+      url.includes("/signin") ||
+      url.includes("identifier") ||
+      url.includes("challenge")
+    ) {
       return false;
     }
 
     try {
       return await this.page.evaluate(() => {
-        // 1. Any prominent Sign in buttons/links indicates logged-out state
+        // 1. If any Sign in links exist, user is NOT authenticated
         const signInElements = Array.from(document.querySelectorAll("a, button")).filter((el) => {
           const text = (el.textContent || "").trim().toLowerCase();
           const href = (el.getAttribute("href") || "").toLowerCase();
@@ -118,22 +123,18 @@ export class GeminiWebClient implements GeminiGenerationClient {
           return false;
         }
 
-        // 2. Presence of Google Account profile / avatar or Sign Out options
-        const hasAccountIndicator = !!(
-          document.querySelector('a[href*="SignOutOptions"]') ||
-          document.querySelector('a[aria-label*="@gmail.com"]') ||
+        // 2. Verified authenticated markers
+        const hasSignOutLink = !!document.querySelector('a[href*="SignOutOptions"]');
+        const hasAccountAria = !!(
           document.querySelector('a[aria-label*="Google Account"]') ||
           document.querySelector('a[aria-label*="Tài khoản Google"]') ||
-          document.querySelector('button[aria-label*="@gmail.com"]') ||
+          document.querySelector('a[aria-label*="@"]') ||
           document.querySelector('button[aria-label*="Google Account"]') ||
           document.querySelector('button[aria-label*="Tài khoản Google"]') ||
-          document.querySelector('button[aria-label*="Account"]') ||
-          document.querySelector("img.gb_A") ||
-          document.querySelector('img[alt*="Google Account"]') ||
-          document.querySelector('img[alt*="profile"]')
+          document.querySelector('button[aria-label*="@"]')
         );
 
-        return hasAccountIndicator;
+        return hasSignOutLink || hasAccountAria;
       });
     } catch {
       return false;
@@ -164,10 +165,14 @@ export class GeminiWebClient implements GeminiGenerationClient {
     log("Opening browser window for Google Gemini Web login...");
 
     const page = await this.getPage(true);
-    await page.goto("https://gemini.google.com/app", {
-      waitUntil: "domcontentloaded",
-      timeout: 60_000,
-    });
+    try {
+      await page.goto("https://gemini.google.com/app", {
+        waitUntil: "domcontentloaded",
+        timeout: 60_000,
+      });
+    } catch {
+      // Ignore transient initial load timeouts
+    }
 
     // Check if already authenticated
     await page.waitForTimeout(2000);
@@ -177,27 +182,62 @@ export class GeminiWebClient implements GeminiGenerationClient {
       return true;
     }
 
-    // Direct user straight to Google Account sign-in page
+    // Direct user straight to Google Account sign-in page without breaking on redirect
     log("Redirecting to Google Account Sign In...");
-    await page.goto(
-      "https://accounts.google.com/ServiceLogin?continue=https://gemini.google.com/app",
-      { waitUntil: "domcontentloaded" }
-    );
+    try {
+      const clicked = await page.evaluate(() => {
+        const links = Array.from(document.querySelectorAll("a, button"));
+        const btn = links.find((el) => {
+          const t = (el.textContent || "").trim().toLowerCase();
+          const href = (el.getAttribute("href") || "").toLowerCase();
+          return (
+            t === "sign in" ||
+            t === "đăng nhập" ||
+            href.includes("accounts.google.com/servicelogin") ||
+            href.includes("servicelogin")
+          );
+        }) as HTMLElement | undefined;
+
+        if (btn) {
+          btn.click();
+          return true;
+        }
+        return false;
+      });
+
+      if (!clicked) {
+        await page.goto(
+          "https://accounts.google.com/v3/signin/identifier?continue=https://gemini.google.com/app",
+          { waitUntil: "commit", timeout: 30_000 }
+        );
+      }
+    } catch {
+      // Redirection between Google sign-in services is expected
+    }
 
     log("Please enter your Google email and password in the opened browser window.");
     log("Complete 2-Step Verification (2FA) if prompted.");
-    log("Waiting for login to complete (timeout: 10 minutes)...");
+    log("Waiting for login to complete in browser (timeout: 10 minutes)...");
 
     // Poll until login is complete: user must land back on gemini.google.com, sign-in button must be gone, and account profile present
     const startTime = Date.now();
     const maxWait = 10 * 60 * 1000; // 10 minutes
 
     while (Date.now() - startTime < maxWait) {
+      if (page.isClosed()) {
+        throw new Error("Browser window was closed before login was completed.");
+      }
+
       await page.waitForTimeout(2000);
       const currentUrl = page.url();
 
       // Still on accounts.google.com (user is entering credentials or OTP)
-      if (currentUrl.includes("accounts.google.com")) {
+      if (
+        currentUrl.includes("accounts.google.com") ||
+        currentUrl.includes("/signin") ||
+        currentUrl.includes("identifier") ||
+        currentUrl.includes("challenge")
+      ) {
         continue;
       }
 
