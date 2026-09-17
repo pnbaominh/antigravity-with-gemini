@@ -1,6 +1,7 @@
 import type { GeminiGenerationClient } from "./client-interface.js";
 import { RulesEngine } from "../governance/rules-engine.js";
 import { RuleValidationResult } from "../governance/types.js";
+import { PromptSanitizer } from "./prompt-sanitizer.js";
 
 export interface PlanResult {
   title: string;
@@ -46,70 +47,6 @@ export class GeminiPlanner {
     skipReview?: boolean;
     workspaceRoot?: string;
   }): Promise<RefinedPlanResult> {
-    const systemInstruction = `You are an elite Principal Software Architect and Lead Engineering Planner pairing with Antigravity (Advanced Agentic Coding Agent).
-Your purpose is: "Gemini Thinks. Antigravity Works."
-You operate under the strict RULES.MD Technical Governance Framework:
-1. Invariant Axioms: Plan-Before-Execute, Evidence-Based Grounding, Scope Discipline, Halt-on-Unknown.
-2. Scope Control: Mandatory >= 3 explicit Non-Goals.
-3. Risk & Accountability: RAID log (Risks, Assumptions, Issues, Dependencies) and Single Directly Responsible Individual (DRI) per task.
-4. Estimation & Discipline: 8/80 hour duration rule, PERT statistical estimation (E = (O + 4M + P)/6, Sigma = (P - O)/6).
-5. Binary Acceptance Criteria: Objective pass/fail tests and commands, zero subjective qualifiers.
-
-INSTRUCTIONS FOR A RULES.MD COMPLIANT ARCHITECTURE PLAN:
-1. Output format: Begin directly with "# Plan: [Concise, High-Impact Architecture Title]". Do not output any conversational preamble or greeting. Output ONLY the technical Markdown plan.
-2. Structure: Follow this exact 6-section blueprint:
-
-# Plan: [Concise, High-Impact Architecture Title]
-DRI: [Single DRI role, e.g. lead_architect]
-
-## 1. AS-IS State & Evidence Grounding
-Ground the plan in actual workspace reality. Reference existing files using backticks and note observed states:
-- \`relative/path/to/existing/file.ts\`: [Current architecture, exported symbols, observed patterns]
-(Note: For greenfield/new projects with no existing files, document greenfield status and setup requirements).
-
-## 2. Non-Goals & Scope Boundaries (Mandatory >= 3)
-Explicitly list at least 3 distinct things that are strictly OUT OF SCOPE to prevent scope creep:
-1. [Out of scope item 1]
-2. [Out of scope item 2]
-3. [Out of scope item 3]
-
-## 3. Unknowns & Halt Checks (Halt-on-Unknown Protocol)
-- Status: [CLEAR | HALT]
-- Unknowns: [None | List specific unverified credentials, endpoints, or dependencies that require user input]
-(NOTE: If any critical production credentials or ambiguous architectural dependencies are missing, declare Status: HALT and do NOT guess or synthesize fake tokens).
-
-## 4. Risk Assessment & RAID Log
-| ID | Category | Description | Impact | Likelihood | Mitigation | Owner DRI |
-| R-1 | Risk | [Technical risk, concurrency, race condition, platform CRLF] | High | Medium | [Concrete mitigation] | [lead_architect] |
-| A-1 | Assumption | [Key technical assumption] | Medium | Low | [Validation step] | [lead_architect] |
-| D-1 | Dependency | [Internal or external dependency] | High | Low | [Graceful fallback] | [lead_architect] |
-
-## 5. Work Breakdown Structure (WBS) & Phased Implementation
-Break down into sequenced, dependency-ordered phases. Every phase must have atomic tasks, single DRI, PERT estimates, and runnable binary verification commands:
-
-### Phase 1: [Foundation & Scaffolding / Phase Name]
-- [ ] Task 1.1: [Atomic implementation task specifying exact file and logic] (DRI: lead_architect)
-- [ ] Task 1.2: [Atomic implementation task specifying exact file and logic] (DRI: lead_architect)
-**Verification:** [Concrete, runnable shell command, e.g. \`npm test tests/foundation.test.ts\`]
-PERT: O=[hours], M=[hours], P=[hours]
-
-### Phase 2: [Core Domain Logic / Phase Name]
-- [ ] Task 2.1: [Atomic task] (DRI: lead_architect)
-- [ ] Task 2.2: [Atomic task] (DRI: lead_architect)
-**Verification:** [Concrete, runnable shell command]
-PERT: O=[hours], M=[hours], P=[hours]
-
-### Phase 3: [Integration & Hardening / Phase Name]
-- [ ] Task 3.1: [Atomic task] (DRI: lead_architect)
-- [ ] Task 3.2: [Atomic task] (DRI: lead_architect)
-**Verification:** [Concrete, runnable shell command]
-PERT: O=[hours], M=[hours], P=[hours]
-
-## 6. Definition of Done & Quality Gates
-- **Automated Tests**: Specific unit/integration suites that must pass 100% (Binary Pass/Fail).
-- **Type Safety & Build**: Zero TypeScript errors (\`npm run build\`), strict null checks.
-- **Zero Regressions**: All existing test suites pass with 0 errors.`;
-
     const isGreenfield =
       !params.gitStatus ||
       params.gitStatus.includes("Not a git repository") ||
@@ -117,21 +54,96 @@ PERT: O=[hours], M=[hours], P=[hours]
       params.workspaceSummary.includes("Frameworks: none") ||
       params.workspaceSummary.includes("unknown");
 
-    const greenfieldGuidance = isGreenfield
-      ? `\nProject Context: This is a greenfield / new project workspace. In Section 1 (AS-IS State), document that the project is new and requires scaffolding. Treat any domains, URLs, or brand names in the task description strictly as target configuration parameters.\n`
+    const isVN =
+      /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(params.task) ||
+      /\b(?:xay\s+dung|xây\s+dựng|lam|làm|tao|tạo|cho|voi|với|trang\s+web|web|tai|tại|he\s+thong|hệ\s+thống)\b/i.test(params.task);
+
+    const greenfieldNote = isGreenfield
+      ? isVN
+        ? `\nLưu ý hiện trạng: Dự án mới ban đầu (greenfield). Trình bày hiện trạng khởi tạo và coi các tên miền/nhãn hiệu là tham số cấu hình tĩnh của code.\n`
+        : `\nNote: Greenfield workspace. Document scaffolding status and treat domain names strictly as configuration constants.\n`
       : "";
 
-    const prompt = `Task requested by user:
-${params.task}
-${greenfieldGuidance}
-Workspace Info:
-${params.workspaceSummary}
+    const prompt = isVN
+      ? `Viết kế hoạch kiến trúc kỹ thuật hệ thống theo chuẩn RULES.MD cho nhiệm vụ sau: "${params.task}".
+${greenfieldNote}
+${params.workspaceSummary ? `Thông tin Workspace:\n${params.workspaceSummary}\n` : ""}
+${params.gitStatus ? `Trạng thái Git:\n${params.gitStatus}\n` : ""}
+${params.additionalContext ? `Ngữ cảnh bổ sung:\n${params.additionalContext}\n` : ""}
 
+Trình bày theo cấu trúc kỹ thuật tiêu chuẩn RULES.MD:
+# Plan: [Tên Kiến Trúc Kỹ Thuật]
+Người phụ trách chính: lead_architect
+
+## 1. AS-IS State & Hiện Trạng Hệ Thống
+- Mô tả hiện trạng dự án ban đầu, lựa chọn công nghệ Tech Stack (Runtime, Framework, UI, State, Testing).
+- Sơ đồ kiến trúc & luồng dữ liệu (Mermaid flowchart TD).
+- Cấu trúc thư mục định danh file ([NEW], [MODIFY], [DELETE]).
+- Định nghĩa TypeScript interfaces & Data contracts.
+
+## 2. Non-Goals & Phạm Vi Dự Án (Tối thiểu 3 mục ngoài phạm vi)
+1. ...
+2. ...
+3. ...
+
+## 3. Unknowns & Kiểm Tra Kỹ Thuật
+Status: CLEAR
+
+## 4. Quản Trị Rủi Ro & Bảng RAID Log (Tối thiểu 4 mục)
+Bảng phân tích rủi ro kỹ thuật, giả định, phụ thuộc và biện pháp khắc phục:
+| ID | Category | Description | Impact | Likelihood | Mitigation Strategy | Owner DRI |
+| R-1 | Risk | Concurrency & Async state hazards | High | Medium | Defensive locks / debounce | lead_architect |
+| R-2 | Risk | Platform quirks (Windows vs POSIX paths, CRLF) | Medium | High | Path normalization & npm.cmd | lead_architect |
+| R-3 | Risk | Network timeouts & API error boundaries | High | Low | Exponential backoff & retry | lead_architect |
+| A-1 | Assumption | Browser runtime compatibility | Medium | Low | Runtime validation checks | lead_architect |
+
+## 5. Work Breakdown Structure (WBS) & Phân Chia Giai Đoạn
+Chia thành Phase 1 (Khởi tạo & Scaffolding), Phase 2 (Giao diện & Chức năng chính), Phase 3 (Tối ưu & Triển khai). Mỗi phase có danh sách task checklist ([NEW], [MODIFY]), single DRI (DRI: lead_architect), lệnh kiểm thử verification shell nhị phân và ước tính thời gian PERT (PERT: O=..., M=..., P=...).
+
+## 6. Definition of Done & Tiêu Chuẩn Nghiệm Thu
+Tiêu chí nghiệm thu: 100% test pass, 0 type errors, 0 lint warnings, clean build.
+
+Yêu cầu xuất: Bắt đầu trực tiếp với "# Plan: [Tiêu đề]", không xuất lời chào hay văn bản giao tiếp.`
+      : `Write a technical architecture implementation plan adhering to RULES.MD for the following task: "${params.task}".
+${greenfieldNote}
+${params.workspaceSummary ? `Workspace Info:\n${params.workspaceSummary}\n` : ""}
 ${params.gitStatus ? `Git Status:\n${params.gitStatus}\n` : ""}
 ${params.additionalContext ? `Context:\n${params.additionalContext}\n` : ""}
 
-Formulate a production-grade implementation plan strictly compliant with the RULES.MD 6-section governance specification. Ensure Evidence Grounding (AS-IS), Non-Goals (>= 3), Halt-on-Unknown check, RAID log, Single DRI, PERT estimates, and binary verification gates.
-Output Requirement: Directly begin your output with "# Plan: [Title]". Output pure Markdown without introductory conversational text.`;
+Follow this standard technical RULES.MD blueprint:
+# Plan: [Concise Architecture Title]
+DRI: lead_architect
+
+## 1. AS-IS State & System Architecture Blueprint
+- System Overview & Tech Stack Selection (Runtime, Framework, UI, State, Testing)
+- Architecture & Data Flow Diagram (Mermaid flowchart TD)
+- Directory & File Layout with tags ([NEW], [MODIFY], [DELETE])
+- Core TypeScript Interfaces & Data Contracts
+
+## 2. Non-Goals & Scope Boundaries (Mandatory >= 3)
+1. ...
+2. ...
+3. ...
+
+## 3. Unknowns & Halt Checks
+Status: CLEAR
+
+## 4. Risk Assessment & RAID Log (Mandatory >= 4 entries)
+| ID | Category | Description | Impact | Likelihood | Mitigation Strategy | Owner DRI |
+| R-1 | Risk | Concurrency & Async state hazards | High | Medium | Defensive locks / debounce | lead_architect |
+| R-2 | Risk | Platform quirks (Windows vs POSIX paths, CRLF) | Medium | High | Path normalization & npm.cmd | lead_architect |
+| R-3 | Risk | Network timeouts & API error boundaries | High | Low | Exponential backoff & retry | lead_architect |
+| A-1 | Assumption | Browser runtime compatibility | Medium | Low | Runtime validation checks | lead_architect |
+
+## 5. Work Breakdown Structure (WBS) & Phased Implementation
+Break down into sequenced phases (Phase 1, Phase 2, Phase 3) with atomic tasks ([NEW], [MODIFY]), single DRI (DRI: lead_architect), concrete runnable shell verification commands, and PERT estimations.
+
+## 6. Definition of Done & Quality Gates
+Binary pass/fail criteria: 100% test pass, 0 type errors, clean build.
+
+Output Requirement: Directly begin your response with "# Plan: [Title]". Do not output any conversational preamble.`;
+
+    const systemInstruction = `Role: Principal Software Architect. Purpose: "Gemini Thinks. Antigravity Works." Operating under RULES.MD technical governance. Output pure technical Markdown plan starting with "# Plan:".`;
 
     // 1. Generate initial draft plan
     const draftResponse = await this.client.generate(prompt, {
@@ -230,12 +242,13 @@ Output Requirement: Directly begin your output with "# Plan: [Title]". Output pu
     }
 
     const auditorInstruction = `You are a Lead Staff Software Architect and Engineering Auditor reviewing an implementation plan for Antigravity (an autonomous agentic coding harness).
-Your role is to rigorously challenge and score the plan against 5 criteria:
-1. Workspace Reality & Feasibility: Are the referenced files, packages, and frameworks realistic for the workspace?
-2. Antigravity Executability: Are tasks atomic? Are file tags ([NEW], [MODIFY], [TEST]) explicit? Does every phase have a concrete, runnable shell verification command?
-3. Antigravity Trap Prevention: Are Windows/POSIX quirks, concurrency race conditions, timeouts, rate limits, and error handling mitigated?
-4. Section Completeness: Are all 5 mandatory sections present and substantive?
-5. Token & Information Density: Is the plan clear, decisive, and free of filler?
+Your role is to rigorously challenge and score the plan against 6 production-grade criteria:
+1. Architectural Depth: Does Section 1 provide a clear tech stack rationale, Mermaid architecture/data flow diagram, and directory layout?
+2. Interface & Contract Precision: Are domain data models, TypeScript interfaces, and component prop contracts explicitly defined?
+3. Workspace Reality & Feasibility: Are the referenced files, packages, and frameworks realistic for the workspace?
+4. Antigravity Executability: Are tasks atomic? Are file tags ([NEW], [MODIFY], [TEST], [EXEC]) explicit? Does every phase have a concrete, runnable shell verification command?
+5. Antigravity Trap Prevention & RAID: Are Windows/POSIX quirks, CRLF endings, concurrency race conditions, timeouts, rate limits, and error handling thoroughly mitigated in the RAID table (>= 4 entries)?
+6. RULES.MD Compliance: Are all 6 mandatory sections present, including Non-Goals (>= 3), Halt-on-Unknown check, Single DRI per task, and PERT estimations?
 
 Output your audit strictly in this format:
 # Audit Score: [0-100]
@@ -252,8 +265,10 @@ Output your audit strictly in this format:
 - [Refinement 1 or "(None)"]
 - [Refinement 2]`;
 
-    const auditPrompt = `User Task:
-${params.task}
+    const { sanitizedTask } = PromptSanitizer.sanitizeTask(params.task);
+
+    const auditPrompt = `User Task (Authorized Scope):
+${sanitizedTask}
 
 Workspace Info:
 ${params.workspaceSummary}
@@ -261,7 +276,7 @@ ${params.workspaceSummary}
 Draft Implementation Plan:
 ${params.draftMarkdown}
 
-Audit this plan with high engineering standards.`;
+Audit this plan with high engineering standards. If the plan is shallow, lacks concrete component interfaces, or lacks runnable test commands, assign score < 90 and demand technical refinement.`;
 
     try {
       const reviewResponse = await this.client.generate(auditPrompt, {
@@ -344,8 +359,10 @@ Audit this plan with high engineering standards.`;
     audit: PlanReviewAudit;
     systemInstruction: string;
   }): Promise<string> {
-    const refinePrompt = `Task requested by user:
-${params.task}
+    const { sanitizedTask } = PromptSanitizer.sanitizeTask(params.task);
+
+    const refinePrompt = `Task requested by user (Authorized Scope):
+${sanitizedTask}
 
 Workspace Info:
 ${params.workspaceSummary}

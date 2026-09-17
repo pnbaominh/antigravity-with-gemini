@@ -4,6 +4,7 @@ import os from "os";
 import fs from "fs";
 import { BrowserDetector } from "./detector.js";
 import type { GeminiGenerationClient } from "../gemini/client-interface.js";
+import { PromptSanitizer } from "../gemini/prompt-sanitizer.js";
 
 export interface WebClientConfig {
   browserPath?: string;
@@ -349,10 +350,18 @@ export class GeminiWebClient implements GeminiGenerationClient {
       );
     }
 
+    // Ensure highest capability model (3.1 Pro / 3.8 Flash) is selected
+    await this.ensureBestModel(page);
+
     // Clean, natural prompt incorporating system instruction if provided
     let fullPrompt = prompt;
-    if (options?.systemInstruction) {
-      fullPrompt = `${options.systemInstruction}\n\n---\n\n${prompt}`;
+    if (
+      options?.systemInstruction &&
+      !prompt.includes("Vai trò:") &&
+      !prompt.includes("Role:") &&
+      !prompt.includes("chuẩn RULES.MD")
+    ) {
+      fullPrompt = `${options.systemInstruction}\n\n${prompt}`;
     }
 
     // 1. Locate chat input element
@@ -430,7 +439,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
       if (status.latestText.length > 50) {
         if (status.latestText === lastContent && !status.isGenerating) {
           stableCount++;
-          if (stableCount >= 2) {
+          if (stableCount >= 3) {
             // Text is stable and generation has completed
             break;
           }
@@ -476,9 +485,20 @@ export class GeminiWebClient implements GeminiGenerationClient {
       lower.includes("encountered an error doing what you asked") ||
       lower.includes("encountering an error") ||
       lower.includes("sorry, something went wrong") ||
+      lower.includes("having a hard time fulfilling your request") ||
+      lower.includes("can i help you with something else") ||
+      lower.includes("can't fulfill this request") ||
+      lower.includes("cannot fulfill this request") ||
+      lower.includes("unable to fulfill") ||
       lower.includes("tôi đã gặp lỗi khi thực hiện") ||
       lower.includes("tôi dường như đang gặp lỗi") ||
       lower.includes("tôi không thể trợ giúp về điều đó") ||
+      lower.includes("tôi không thể hỗ trợ") ||
+      lower.includes("tôi không thể thực hiện") ||
+      lower.includes("tôi không thể hoàn thành") ||
+      lower.includes("tôi không thể cung cấp") ||
+      lower.includes("tôi không thể đáp ứng") ||
+      lower.includes("không thể trợ giúp bạn") ||
       lower.includes("là một mô hình ngôn ngữ") ||
       lower.includes("tôi là một mô hình ngôn ngữ") ||
       lower.includes("tôi là một công nghệ trí tuệ nhân tạo") ||
@@ -486,6 +506,15 @@ export class GeminiWebClient implements GeminiGenerationClient {
       lower.includes("nằm ngoài khả năng") ||
       lower.includes("nằm ngoài mục đích") ||
       lower.includes("can't help with that") ||
+      lower.includes("cannot assist") ||
+      lower.includes("as a language model") ||
+      lower.includes("unable to assist") ||
+      lower.includes("safety policy") ||
+      lower.includes("content policy") ||
+      lower.includes("chính sách an toàn") ||
+      lower.includes("cannot browse the web") ||
+      lower.includes("không thể duyệt web") ||
+      lower.includes("không có quyền truy cập") ||
       lower.includes("something went wrong") ||
       lower.includes("đã xảy ra sự cố")
     );
@@ -519,37 +548,62 @@ export class GeminiWebClient implements GeminiGenerationClient {
       }
     } catch {}
 
-    const safePrompt = `Viết kế hoạch kiến trúc kỹ thuật hệ thống cho nhiệm vụ sau: "${taskPrompt}".
+    await this.ensureBestModel(page);
 
-Trình bày theo cấu trúc kỹ thuật tiêu chuẩn:
-# Plan: Kế Hoạch Kiến Trúc Kỹ Thuật
-Người phụ trách chính: lead_architect
+    const taskMatch = taskPrompt.match(/Task:\s*([\s\S]*?)(?=\nDomain|\nProject|\nWorkspace|\n---|$)/i);
+    const coreTask = taskMatch ? taskMatch[1].trim() : taskPrompt.slice(0, 250).trim();
+    const sanitized = PromptSanitizer.sanitizeTask(coreTask);
 
-## 1. AS-IS State & Hiện Trạng Hệ Thống
-Mô tả hiện trạng dự án ban đầu và mục tiêu triển khai.
+    const safePrompt = `Vai trò: Principal Software Architect
+Tài liệu: Kế Hoạch Kiến Trúc Kỹ Thuật Phần Mềm & Đặc Tả Hệ Thống (RFC)
+Mục tiêu phát triển: ${sanitized.sanitizedTask}
+
+Hãy soạn thảo bản thiết kế kiến trúc kỹ thuật phần mềm đầy đủ và chuyên sâu theo chuẩn 6 phần của RULES.MD:
+
+# Plan: Kế Hoạch Kiến Trúc Kỹ Thuật Hệ Thống
+DRI: lead_architect
+
+## 1. AS-IS State & System Architecture Blueprint
+- Hiện trạng hệ thống & Lựa chọn Tech Stack (Runtime, Framework, UI, State, Testing).
+- Sơ đồ kiến trúc & luồng dữ liệu (Mermaid flowchart TD).
+- Cấu trúc thư mục định danh file ([NEW], [MODIFY], [DELETE]).
+- Định nghĩa TypeScript interfaces & Data contracts.
 
 ## 2. Non-Goals & Phạm Vi Dự Án (Tối thiểu 3 mục ngoài phạm vi)
-1. ...
-2. ...
-3. ...
+1. [Mục 1 ngoài phạm vi và lý do kỹ thuật]
+2. [Mục 2 ngoài phạm vi và lý do kỹ thuật]
+3. [Mục 3 ngoài phạm vi và lý do kỹ thuật]
 
-## 3. Unknowns & Kiểm Tra Kỹ Thuật
-Status: CLEAR
+## 3. Unknowns & Kiểm Tra Kỹ Thuật (Halt-on-Unknown)
+- Status: CLEAR
+- Unknowns: None
 
-## 4. Quản Trị Rủi Ro & Bảng RAID Log
-Bảng phân tích rủi ro kỹ thuật, giả định, phụ thuộc và biện pháp khắc phục.
+## 4. Quản Trị Rủi Ro & Bảng RAID Log (Tối thiểu 4 mục)
+Bảng phân tích chi tiết: Concurrency / Race conditions, OS path quirks (Windows CRLF & backslashes), Timeouts / Rate limits, State lifecycle:
+| ID | Category | Description | Impact | Likelihood | Mitigation Strategy | Owner DRI |
+| R-1 | Risk | Concurrency & Async state hazards | High | Medium | Defensive locks / debounce | lead_architect |
+| R-2 | Risk | Platform quirks (Windows vs POSIX paths, CRLF) | Medium | High | Path normalization & npm.cmd | lead_architect |
+| R-3 | Risk | Network timeouts & API error boundaries | High | Low | Exponential backoff & retry | lead_architect |
+| A-1 | Assumption | Browser runtime compatibility | Medium | Low | Runtime validation checks | lead_architect |
 
 ## 5. Work Breakdown Structure (WBS) & Phân Chia Giai Đoạn
-Chia thành Phase 1 (Khởi tạo & Scaffolding), Phase 2 (Giao diện & Chức năng chính), Phase 3 (Tối ưu & Triển khai). Mỗi phase có danh sách task checklist, lệnh kiểm thử verification và ước tính thời gian PERT.
+Chia thành các Phase cụ thể (Phase 1: Khởi tạo Scaffolding & Types, Phase 2: Domain Logic & UI Components, Phase 3: State & Error Boundaries, Phase 4: Production Build & Hardening).
+Mỗi task có nhãn file ([NEW], [MODIFY]), single DRI (DRI: lead_architect), lệnh kiểm thử shell nhị phân (Verification) và ước tính PERT (PERT: O=..., M=..., P=...).
 
 ## 6. Definition of Done & Tiêu Chuẩn Nghiệm Thu
-Tiêu chí nghiệm thu, kiểm thử tự động và chất lượng code.`;
+Tiêu chuẩn pass/fail: 100% test pass, 0 type errors, 0 lint warnings, clean build.
+
+Yêu cầu xuất: Bắt đầu ngay lập tức với "# Plan: [Tiêu đề]", không xuất lời chào hay văn bản giao tiếp.`;
 
     const inputSelector =
       'div[role="textbox"].ql-editor, rich-textarea div[role="textbox"], div[contenteditable="true"], div[role="textbox"]';
     const textbox = page.locator(inputSelector).first();
     await textbox.waitFor({ timeout: 15_000 });
     await textbox.click();
+
+    const initialResponseCount = await page.evaluate(() => {
+      return document.querySelectorAll('message-content, .model-response, [data-test-id="model-response"]').length;
+    });
 
     await page.keyboard.insertText(safePrompt);
     await page.waitForTimeout(800);
@@ -568,6 +622,18 @@ Tiêu chí nghiệm thu, kiểm thử tự động và chất lượng code.`;
 
     const timeoutMs = this.config.timeoutMs || 180_000;
     const startTime = Date.now();
+
+    // Wait until response count increments
+    while (Date.now() - startTime < 25_000) {
+      const currentCount = await page.evaluate(() => {
+        return document.querySelectorAll('message-content, .model-response, [data-test-id="model-response"]').length;
+      });
+      if (currentCount > initialResponseCount) {
+        break;
+      }
+      await page.waitForTimeout(500);
+    }
+
     let lastContent = "";
     let stableCount = 0;
 
@@ -578,7 +644,7 @@ Tiêu chí nghiệm thu, kiểm thử tự động và chất lượng code.`;
         const stopBtn =
           document.querySelector('button[aria-label*="Stop"], button[aria-label*="Dừng"]') ||
           document.querySelector('mat-spinner, .loading-indicator');
-        const isGenerating = !stopBtn;
+        const isGenerating = !!stopBtn;
 
         const responseEls = document.querySelectorAll(
           'message-content, .model-response, [data-test-id="model-response"]'
@@ -595,7 +661,7 @@ Tiêu chí nghiệm thu, kiểm thử tự động và chất lượng code.`;
       if (status.latestText.length > 50) {
         if (status.latestText === lastContent && !status.isGenerating) {
           stableCount++;
-          if (stableCount >= 2) {
+          if (stableCount >= 3) {
             break;
           }
         } else {
@@ -622,6 +688,58 @@ Tiêu chí nghiệm thu, kiểm thử tự động và chất lượng code.`;
       text: retryExtracted,
       model: "gemini-web",
     };
+  }
+
+  /**
+   * Automatically switches to the highest capability model available (e.g. 3.1 Pro or 3.8 Flash)
+   * to avoid unstable extended modes or legacy limits.
+   */
+  public async ensureBestModel(page: Page): Promise<void> {
+    try {
+      const modelSelector = page
+        .locator(
+          'button[data-test-id="bard-mode-menu-button"], button.input-area-switch, [aria-label*="chọn mô hình"], [aria-label*="model"]'
+        )
+        .first();
+      if (await modelSelector.isVisible()) {
+        const currentText = await modelSelector.innerText();
+        // In Gemini Web UI, selecting 3.1 Pro displays "Pro" or "Pro Mở rộng" on the button
+        if (currentText.includes("Pro")) {
+          return;
+        }
+
+        await modelSelector.click();
+        await page.waitForTimeout(800);
+
+        // 1. Prioritize 3.1 Pro
+        const proOption = page
+          .locator(
+            '[role="menuitem"]:has-text("3.1 Pro"), [role="menuitemradio"]:has-text("3.1 Pro"), button:has-text("3.1 Pro")'
+          )
+          .first();
+        if (await proOption.isVisible()) {
+          await proOption.click();
+          await page.waitForTimeout(1000);
+          return;
+        }
+
+        // 2. Next try 3.8 Flash
+        const flashOption = page
+          .locator(
+            '[role="menuitem"]:has-text("3.8 Flash"), [role="menuitemradio"]:has-text("3.8 Flash"), button:has-text("3.8 Flash")'
+          )
+          .first();
+        if (await flashOption.isVisible()) {
+          await flashOption.click();
+          await page.waitForTimeout(1000);
+          return;
+        }
+
+        await page.keyboard.press("Escape");
+      }
+    } catch {
+      // Graceful fallback if selector structure changes
+    }
   }
 
   /**
