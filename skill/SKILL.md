@@ -13,10 +13,12 @@ description: >
 > Gemini phụ trách suy nghĩ & lập kế hoạch. Antigravity phụ trách thực thi mã nguồn.
 
 > [!CAUTION]
-> ### 🛑 BẮT BUỘC: KHÔNG ĐƯỢC ĐỂ ANTIGRAVITY TỰ LẬP PLAN (ZERO SELF-PLANNING BY ANTI)
-> - **Khi người dùng gọi `/antigravity-with-gemini` hoặc yêu cầu lên plan**: Antigravity **TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ SUY NGHĨ / TỰ VIẾT PLAN** trong ngữ cảnh của mình, và **KHÔNG ĐƯỢC TỰ TẠO `implementation_plan.md`** bằng token của Antigravity!
+> ### 🛑 BẮT BUỘC: KHÔNG ĐƯỢC ĐỂ ANTIGRAVITY TỰ LẬP PLAN & CHỐNG ẢO GIÁC QUOTA
+> - **KHÔNG CÓ QUOTA GOOGLE AI STUDIO**: G2A hoạt động **100% tự động qua phiên Gemini Web cục bộ (`gemini.google.com`)**. Hoàn toàn **KHÔNG CẦN API KEY** và **KHÔNG CÓ GIỚI HẠN QUOTA 20 REQ/NGÀY CỦA GOOGLE AI STUDIO**. Antigravity **TUYỆT ĐỐI KHÔNG ĐƯỢC NÓI / BÁO CÁO ẢO GIÁC** rằng "G2A tạm chạm giới hạn quota API 20 req/ngày của Google AI Studio"!
+> - **TUYỆT ĐỐI CẤM ANTIGRAVITY TỰ LẬP PLAN (ZERO SELF-PLANNING BY ANTI)**: Khi người dùng yêu cầu lập kế hoạch hoặc gọi `/antigravity-with-gemini`, Antigravity **TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ SUY NGHĨ / TỰ VIẾT PLAN** trong context của mình, và **KHÔNG ĐƯỢC TỰ TẠO `implementation_plan.md`** bằng token của Antigravity kể cả khi công cụ báo lỗi tạm thời!
 > - **HÀNH ĐỘNG BẮT BUỘC**: Antigravity **PHẢI LUÔN LUÔN GỌI MCP TOOL** `gemini_plan` thông qua `call_mcp_tool(ServerName: "antigravity-with-gemini", ToolName: "gemini_plan", Arguments: { task: "..." })` (hoặc chạy lệnh CLI `g2a plan "<task>"`).
-> - Gemini sẽ suy nghĩ chuyên sâu (8,192 reasoning tokens) với các model hiện đại (> 3.0), viết plan chuẩn RULES.MD lưu vào file đĩa `.g2a/plans/plan-<id>.md` và trả về một ticket pointer siêu nhẹ (< 50 tokens).
+> - Nếu `gemini_plan` gặp lỗi tạm thời: Antigravity phải báo lỗi thực tế, hướng dẫn người dùng kiểm tra phiên đăng nhập trình duyệt bằng `g2a login-web`, và thực hiện lại lệnh `g2a plan "<task>"`. TUYỆT ĐỐI KHÔNG TỰ VIẾT PLAN THAY THẾ!
+> - Gemini Web sẽ suy nghĩ và viết plan chuẩn RULES.MD lưu vào file đĩa `.g2a/plans/plan-<id>.md` và trả về một ticket pointer siêu nhẹ (< 50 tokens).
 > - Antigravity chỉ nhận ticket, báo cho người dùng đường dẫn file plan trên đĩa, và dùng `gemini_get_phase(phaseIndex)` để lấy từng phase JIT khi thực thi, bảo đảm **0% context bloat** cho Antigravity.
 
 Antigravity owns execution: code editing, terminal commands, running test suites, git commits, and recovery.  

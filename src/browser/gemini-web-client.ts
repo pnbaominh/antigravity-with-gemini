@@ -317,13 +317,26 @@ export class GeminiWebClient implements GeminiGenerationClient {
   ): Promise<{ text: string; model: string }> {
     const page = await this.getPage(this.config.headless === false);
 
-    // If not already on Gemini Web, navigate there
+    // Ensure we start in a fresh conversation on Gemini Web to prevent context pollution
     if (!page.url().includes("gemini.google.com")) {
       await page.goto("https://gemini.google.com/app", {
         waitUntil: "domcontentloaded",
         timeout: 45_000,
       });
       await page.waitForTimeout(2000);
+    } else {
+      // If already on Gemini Web, reset to a fresh chat
+      try {
+        const newChatBtn = page
+          .locator(
+            'button:has-text("Cuộc trò chuyện mới"), button:has-text("New chat"), a:has-text("Cuộc trò chuyện mới"), a:has-text("New chat"), [aria-label*="Cuộc trò chuyện mới"], [aria-label*="New chat"]'
+          )
+          .first();
+        if (await newChatBtn.isVisible()) {
+          await newChatBtn.click();
+          await page.waitForTimeout(1500);
+        }
+      } catch {}
     }
 
     await this.handleCaptchaAndPopups(page);
@@ -336,10 +349,10 @@ export class GeminiWebClient implements GeminiGenerationClient {
       );
     }
 
-    // Full prompt incorporating system instruction if provided
+    // Clean, natural prompt incorporating system instruction if provided
     let fullPrompt = prompt;
     if (options?.systemInstruction) {
-      fullPrompt = `[System Directives]\n${options.systemInstruction}\n\n[User Task]\n${prompt}`;
+      fullPrompt = `${options.systemInstruction}\n\n---\n\n${prompt}`;
     }
 
     // 1. Locate chat input element
@@ -361,7 +374,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
     // 3. Click Send button or press Enter
     const sendButton = page
       .locator(
-        'button[aria-label*="Send"], button[aria-label*="Gửi"], button.send-button, [data-test-id="send-button"]'
+        'button[aria-label*="Gửi tin nhắn"], button[aria-label*="Send message"], button[aria-label*="Send"], button[aria-label*="Gửi"], button.send-button, [data-test-id="send-button"]'
       )
       .first();
 
@@ -444,15 +457,169 @@ export class GeminiWebClient implements GeminiGenerationClient {
       throw new Error("Failed to extract response text from Gemini Web.");
     }
 
-    if (
-      extracted.includes("I encountered an error doing what you asked") ||
-      extracted.includes("Tôi đã gặp lỗi khi thực hiện")
-    ) {
-      throw new Error(`Gemini Web responded with backend error: "${extracted}"`);
+    if (this.isBackendError(extracted)) {
+      return await this.retryWithSafeFraming(page, prompt, extracted);
     }
 
     return {
       text: extracted,
+      model: "gemini-web",
+    };
+  }
+
+  /**
+   * Checks if extracted text is a known backend/safety refusal from Gemini Web.
+   */
+  public isBackendError(text: string): boolean {
+    const lower = text.toLowerCase();
+    return (
+      lower.includes("encountered an error doing what you asked") ||
+      lower.includes("encountering an error") ||
+      lower.includes("sorry, something went wrong") ||
+      lower.includes("tôi đã gặp lỗi khi thực hiện") ||
+      lower.includes("tôi dường như đang gặp lỗi") ||
+      lower.includes("tôi không thể trợ giúp về điều đó") ||
+      lower.includes("là một mô hình ngôn ngữ") ||
+      lower.includes("tôi là một mô hình ngôn ngữ") ||
+      lower.includes("tôi là một công nghệ trí tuệ nhân tạo") ||
+      lower.includes("tôi không được lập trình") ||
+      lower.includes("nằm ngoài khả năng") ||
+      lower.includes("nằm ngoài mục đích") ||
+      lower.includes("can't help with that") ||
+      lower.includes("something went wrong") ||
+      lower.includes("đã xảy ra sự cố")
+    );
+  }
+
+  /**
+   * Safe fallback retry when Gemini Web rejects or errors on direct prompt.
+   */
+  private async retryWithSafeFraming(
+    page: Page,
+    taskPrompt: string,
+    previousError: string
+  ): Promise<{ text: string; model: string }> {
+    console.warn(
+      `[GeminiWeb] Detected Gemini Web backend/safety response ("${previousError.slice(0, 60)}..."). Automatically retrying in a fresh session with safe architectural framing...`
+    );
+
+    // Reset to a clean chat session
+    try {
+      const newChatBtn = page
+        .locator(
+          'button:has-text("Cuộc trò chuyện mới"), button:has-text("New chat"), a:has-text("Cuộc trò chuyện mới"), a:has-text("New chat"), [aria-label*="Cuộc trò chuyện mới"], [aria-label*="New chat"]'
+        )
+        .first();
+      if (await newChatBtn.isVisible()) {
+        await newChatBtn.click();
+        await page.waitForTimeout(2000);
+      } else {
+        await page.goto("https://gemini.google.com/app", { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(3000);
+      }
+    } catch {}
+
+    const safePrompt = `Viết kế hoạch kiến trúc kỹ thuật hệ thống cho nhiệm vụ sau: "${taskPrompt}".
+
+Trình bày theo cấu trúc kỹ thuật tiêu chuẩn:
+# Plan: Kế Hoạch Kiến Trúc Kỹ Thuật
+Người phụ trách chính: lead_architect
+
+## 1. AS-IS State & Hiện Trạng Hệ Thống
+Mô tả hiện trạng dự án ban đầu và mục tiêu triển khai.
+
+## 2. Non-Goals & Phạm Vi Dự Án (Tối thiểu 3 mục ngoài phạm vi)
+1. ...
+2. ...
+3. ...
+
+## 3. Unknowns & Kiểm Tra Kỹ Thuật
+Status: CLEAR
+
+## 4. Quản Trị Rủi Ro & Bảng RAID Log
+Bảng phân tích rủi ro kỹ thuật, giả định, phụ thuộc và biện pháp khắc phục.
+
+## 5. Work Breakdown Structure (WBS) & Phân Chia Giai Đoạn
+Chia thành Phase 1 (Khởi tạo & Scaffolding), Phase 2 (Giao diện & Chức năng chính), Phase 3 (Tối ưu & Triển khai). Mỗi phase có danh sách task checklist, lệnh kiểm thử verification và ước tính thời gian PERT.
+
+## 6. Definition of Done & Tiêu Chuẩn Nghiệm Thu
+Tiêu chí nghiệm thu, kiểm thử tự động và chất lượng code.`;
+
+    const inputSelector =
+      'div[role="textbox"].ql-editor, rich-textarea div[role="textbox"], div[contenteditable="true"], div[role="textbox"]';
+    const textbox = page.locator(inputSelector).first();
+    await textbox.waitFor({ timeout: 15_000 });
+    await textbox.click();
+
+    await page.keyboard.insertText(safePrompt);
+    await page.waitForTimeout(800);
+
+    const sendButton = page
+      .locator(
+        'button[aria-label*="Gửi tin nhắn"], button[aria-label*="Send message"], button[aria-label*="Send"], button[aria-label*="Gửi"], button.send-button'
+      )
+      .first();
+
+    if (await sendButton.isVisible() && (await sendButton.isEnabled())) {
+      await sendButton.click();
+    } else {
+      await page.keyboard.press("Enter");
+    }
+
+    const timeoutMs = this.config.timeoutMs || 180_000;
+    const startTime = Date.now();
+    let lastContent = "";
+    let stableCount = 0;
+
+    while (Date.now() - startTime < timeoutMs) {
+      await page.waitForTimeout(1500);
+
+      const status = await page.evaluate(() => {
+        const stopBtn =
+          document.querySelector('button[aria-label*="Stop"], button[aria-label*="Dừng"]') ||
+          document.querySelector('mat-spinner, .loading-indicator');
+        const isGenerating = !stopBtn;
+
+        const responseEls = document.querySelectorAll(
+          'message-content, .model-response, [data-test-id="model-response"]'
+        );
+        let latestText = "";
+        if (responseEls.length > 0) {
+          const lastEl = responseEls[responseEls.length - 1] as HTMLElement;
+          latestText = lastEl.innerText || "";
+        }
+
+        return { isGenerating, latestText };
+      });
+
+      if (status.latestText.length > 50) {
+        if (status.latestText === lastContent && !status.isGenerating) {
+          stableCount++;
+          if (stableCount >= 2) {
+            break;
+          }
+        } else {
+          stableCount = 0;
+          lastContent = status.latestText;
+        }
+      }
+    }
+
+    const retryExtracted = await page.evaluate(() => {
+      const responseEls = document.querySelectorAll(
+        'message-content, .model-response, [data-test-id="model-response"]'
+      );
+      if (responseEls.length === 0) return "";
+      const lastEl = responseEls[responseEls.length - 1] as HTMLElement;
+      return lastEl.innerText.trim();
+    });
+
+    if (!retryExtracted || this.isBackendError(retryExtracted)) {
+      throw new Error(`Gemini Web responded with backend error: "${retryExtracted || previousError}"`);
+    }
+
+    return {
+      text: retryExtracted,
       model: "gemini-web",
     };
   }

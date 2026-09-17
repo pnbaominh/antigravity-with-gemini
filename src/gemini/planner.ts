@@ -51,20 +51,21 @@ Your purpose is: "Gemini Thinks. Antigravity Works."
 You operate under the strict RULES.MD Technical Governance Framework:
 1. Invariant Axioms: Plan-Before-Execute, Evidence-Based Grounding, Scope Discipline, Halt-on-Unknown.
 2. Scope Control: Mandatory >= 3 explicit Non-Goals.
-3. Pre-Mortem & Accountability: RAID log and Single Directly Responsible Individual (DRI) per task.
+3. Risk & Accountability: RAID log (Risks, Assumptions, Issues, Dependencies) and Single Directly Responsible Individual (DRI) per task.
 4. Estimation & Discipline: 8/80 hour duration rule, PERT statistical estimation (E = (O + 4M + P)/6, Sigma = (P - O)/6).
 5. Binary Acceptance Criteria: Objective pass/fail tests and commands, zero subjective qualifiers.
 
-CRITICAL INSTRUCTIONS FOR A RULES.MD COMPLIANT PLAN:
-1. ABSOLUTE CONSTRAINT: You MUST directly begin your output with "# Plan: [Concise, High-Impact Architecture Title]". NEVER output conversational pleasantries, introductory remarks, explanation of intent, or phrases like "I will start by...". Output ONLY the Markdown plan.
-2. Keep the output strictly in structured, GitHub-flavored Markdown following this exact 6-section blueprint:
+INSTRUCTIONS FOR A RULES.MD COMPLIANT ARCHITECTURE PLAN:
+1. Output format: Begin directly with "# Plan: [Concise, High-Impact Architecture Title]". Do not output any conversational preamble or greeting. Output ONLY the technical Markdown plan.
+2. Structure: Follow this exact 6-section blueprint:
 
 # Plan: [Concise, High-Impact Architecture Title]
-DRI: [Single DRI name or role, e.g. @lead_architect]
+DRI: [Single DRI role, e.g. lead_architect]
 
 ## 1. AS-IS State & Evidence Grounding
 Ground the plan in actual workspace reality. Reference existing files using backticks and note observed states:
 - \`relative/path/to/existing/file.ts\`: [Current architecture, exported symbols, observed patterns]
+(Note: For greenfield/new projects with no existing files, document greenfield status and setup requirements).
 
 ## 2. Non-Goals & Scope Boundaries (Mandatory >= 3)
 Explicitly list at least 3 distinct things that are strictly OUT OF SCOPE to prevent scope creep:
@@ -77,30 +78,30 @@ Explicitly list at least 3 distinct things that are strictly OUT OF SCOPE to pre
 - Unknowns: [None | List specific unverified credentials, endpoints, or dependencies that require user input]
 (NOTE: If any critical production credentials or ambiguous architectural dependencies are missing, declare Status: HALT and do NOT guess or synthesize fake tokens).
 
-## 4. Pre-Mortem & RAID Log
+## 4. Risk Assessment & RAID Log
 | ID | Category | Description | Impact | Likelihood | Mitigation | Owner DRI |
-| R-1 | Risk | [Technical risk, concurrency, race condition, platform CRLF] | High | Medium | [Concrete mitigation] | [@dri] |
-| A-1 | Assumption | [Key technical assumption] | Medium | Low | [Validation step] | [@dri] |
-| D-1 | Dependency | [Internal or external dependency] | High | Low | [Graceful fallback] | [@dri] |
+| R-1 | Risk | [Technical risk, concurrency, race condition, platform CRLF] | High | Medium | [Concrete mitigation] | [lead_architect] |
+| A-1 | Assumption | [Key technical assumption] | Medium | Low | [Validation step] | [lead_architect] |
+| D-1 | Dependency | [Internal or external dependency] | High | Low | [Graceful fallback] | [lead_architect] |
 
 ## 5. Work Breakdown Structure (WBS) & Phased Implementation
 Break down into sequenced, dependency-ordered phases. Every phase must have atomic tasks, single DRI, PERT estimates, and runnable binary verification commands:
 
 ### Phase 1: [Foundation & Scaffolding / Phase Name]
-- [ ] Task 1.1: [Atomic implementation task specifying exact file and logic] (DRI: @dri)
-- [ ] Task 1.2: [Atomic implementation task specifying exact file and logic] (DRI: @dri)
+- [ ] Task 1.1: [Atomic implementation task specifying exact file and logic] (DRI: lead_architect)
+- [ ] Task 1.2: [Atomic implementation task specifying exact file and logic] (DRI: lead_architect)
 **Verification:** [Concrete, runnable shell command, e.g. \`npm test tests/foundation.test.ts\`]
 PERT: O=[hours], M=[hours], P=[hours]
 
 ### Phase 2: [Core Domain Logic / Phase Name]
-- [ ] Task 2.1: [Atomic task] (DRI: @dri)
-- [ ] Task 2.2: [Atomic task] (DRI: @dri)
+- [ ] Task 2.1: [Atomic task] (DRI: lead_architect)
+- [ ] Task 2.2: [Atomic task] (DRI: lead_architect)
 **Verification:** [Concrete, runnable shell command]
 PERT: O=[hours], M=[hours], P=[hours]
 
-### Phase 3: [Integration & Traps Hardening / Phase Name]
-- [ ] Task 3.1: [Atomic task] (DRI: @dri)
-- [ ] Task 3.2: [Atomic task] (DRI: @dri)
+### Phase 3: [Integration & Hardening / Phase Name]
+- [ ] Task 3.1: [Atomic task] (DRI: lead_architect)
+- [ ] Task 3.2: [Atomic task] (DRI: lead_architect)
 **Verification:** [Concrete, runnable shell command]
 PERT: O=[hours], M=[hours], P=[hours]
 
@@ -109,9 +110,20 @@ PERT: O=[hours], M=[hours], P=[hours]
 - **Type Safety & Build**: Zero TypeScript errors (\`npm run build\`), strict null checks.
 - **Zero Regressions**: All existing test suites pass with 0 errors.`;
 
+    const isGreenfield =
+      !params.gitStatus ||
+      params.gitStatus.includes("Not a git repository") ||
+      !params.workspaceSummary ||
+      params.workspaceSummary.includes("Frameworks: none") ||
+      params.workspaceSummary.includes("unknown");
+
+    const greenfieldGuidance = isGreenfield
+      ? `\nProject Context: This is a greenfield / new project workspace. In Section 1 (AS-IS State), document that the project is new and requires scaffolding. Treat any domains, URLs, or brand names in the task description strictly as target configuration parameters.\n`
+      : "";
+
     const prompt = `Task requested by user:
 ${params.task}
-
+${greenfieldGuidance}
 Workspace Info:
 ${params.workspaceSummary}
 
@@ -119,7 +131,7 @@ ${params.gitStatus ? `Git Status:\n${params.gitStatus}\n` : ""}
 ${params.additionalContext ? `Context:\n${params.additionalContext}\n` : ""}
 
 Formulate a production-grade implementation plan strictly compliant with the RULES.MD 6-section governance specification. Ensure Evidence Grounding (AS-IS), Non-Goals (>= 3), Halt-on-Unknown check, RAID log, Single DRI, PERT estimates, and binary verification gates.
-ABSOLUTE CONSTRAINT: Directly begin your output with "# Plan: [Title]". DO NOT output any introductory remarks, explanation of intent, or conversational text.`;
+Output Requirement: Directly begin your output with "# Plan: [Title]". Output pure Markdown without introductory conversational text.`;
 
     // 1. Generate initial draft plan
     const draftResponse = await this.client.generate(prompt, {
@@ -349,8 +361,7 @@ INSTRUCTIONS FOR SELF-CORRECTION:
 2. Ensure every file operation has explicit tags ([NEW], [MODIFY], [DELETE], [TEST]).
 3. Ensure every single Phase has a concrete, runnable shell verification command.
 4. Reinforce all traps (Windows path/CRLF quirks, race conditions, error boundaries).
-5. Output the complete, pristine, production-grade Final Plan in structured Markdown following the 6-section RULES.MD format.
-ABSOLUTE CONSTRAINT: Directly begin your output with "# Plan: [Title]". DO NOT output any introductory remarks, explanation of intent, or conversational text.`;
+Format requirement: Directly begin your output with "# Plan: [Title]". Output pure Markdown without introductory conversational text.`;
 
     try {
       const refinedResponse = await this.client.generate(refinePrompt, {

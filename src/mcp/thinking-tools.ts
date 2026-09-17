@@ -117,7 +117,7 @@ export function registerThinkingTools(
           content: [
             {
               type: "text",
-              text: `Gemini planning failed: ${error?.message || String(error)}`,
+              text: `Gemini planning failed: ${error?.message || String(error)}\n\n[G2A Architecture Notice]: G2A operates exclusively via local Gemini Web (zero Google AI Studio API keys, zero 20 req/day quota). Antigravity MUST NOT attempt to self-plan or synthesize implementation_plan.md itself. Please ensure Gemini Web login via 'g2a login-web' or retry with 'g2a plan "<task>"'.`,
             },
           ],
         };
