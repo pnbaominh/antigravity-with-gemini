@@ -9,8 +9,8 @@ export const MAX_PAIRING_ATTEMPTS = 5;
 export const MIN_SUPPORTED_GEMINI_VERSION = 3.1;
 
 export const DEFAULT_GEMINI_MODELS = {
-  PLANNER: process.env.GEMINI_PLANNER_MODEL || "gemini-3.8-flash",
-  THINKING: process.env.GEMINI_THINKING_MODEL || "gemini-3.8-flash",
+  PLANNER: process.env.GEMINI_PLANNER_MODEL || "gemini-3.5-flash",
+  THINKING: process.env.GEMINI_THINKING_MODEL || "gemini-3.5-flash",
   FAST: process.env.GEMINI_FAST_MODEL || "gemini-3.5-flash-lite",
 } as const;
 

@@ -56,7 +56,8 @@ You operate under the strict RULES.MD Technical Governance Framework:
 5. Binary Acceptance Criteria: Objective pass/fail tests and commands, zero subjective qualifiers.
 
 CRITICAL INSTRUCTIONS FOR A RULES.MD COMPLIANT PLAN:
-1. Keep the output strictly in structured, GitHub-flavored Markdown following this exact 6-section blueprint:
+1. ABSOLUTE CONSTRAINT: You MUST directly begin your output with "# Plan: [Concise, High-Impact Architecture Title]". NEVER output conversational pleasantries, introductory remarks, explanation of intent, or phrases like "I will start by...". Output ONLY the Markdown plan.
+2. Keep the output strictly in structured, GitHub-flavored Markdown following this exact 6-section blueprint:
 
 # Plan: [Concise, High-Impact Architecture Title]
 DRI: [Single DRI name or role, e.g. @lead_architect]
@@ -117,7 +118,8 @@ ${params.workspaceSummary}
 ${params.gitStatus ? `Git Status:\n${params.gitStatus}\n` : ""}
 ${params.additionalContext ? `Context:\n${params.additionalContext}\n` : ""}
 
-Formulate a production-grade implementation plan strictly compliant with the RULES.MD 6-section governance specification. Ensure Evidence Grounding (AS-IS), Non-Goals (>= 3), Halt-on-Unknown check, RAID log, Single DRI, PERT estimates, and binary verification gates.`;
+Formulate a production-grade implementation plan strictly compliant with the RULES.MD 6-section governance specification. Ensure Evidence Grounding (AS-IS), Non-Goals (>= 3), Halt-on-Unknown check, RAID log, Single DRI, PERT estimates, and binary verification gates.
+ABSOLUTE CONSTRAINT: Directly begin your output with "# Plan: [Title]". DO NOT output any introductory remarks, explanation of intent, or conversational text.`;
 
     // 1. Generate initial draft plan
     const draftResponse = await this.client.generate(prompt, {
@@ -150,12 +152,17 @@ Formulate a production-grade implementation plan strictly compliant with the RUL
       task: params.task,
       workspaceSummary: params.workspaceSummary,
       draftMarkdown,
+      workspaceRoot: params.workspaceRoot,
     });
 
     let finalMarkdown = draftMarkdown;
 
-    // 3. If needs refinement or score < 90, perform Self-Correction
-    if (audit.verdict === "REFINED" || audit.score < 90) {
+    // 3. Perform Self-Correction if audit detected issues or score < 90
+    if (
+      audit.verdict === "REFINED" ||
+      audit.score < 90 ||
+      !RulesEngine.validateMarkdownPlan(draftMarkdown, params.workspaceRoot).valid
+    ) {
       finalMarkdown = await this.refinePlan({
         task: params.task,
         workspaceSummary: params.workspaceSummary,
@@ -188,7 +195,27 @@ Formulate a production-grade implementation plan strictly compliant with the RUL
     task: string;
     workspaceSummary: string;
     draftMarkdown: string;
+    workspaceRoot?: string;
   }): Promise<PlanReviewAudit> {
+    // If draft is truncated, too short, or lacks required plan title, immediately reject and demand refinement
+    if (params.draftMarkdown.length < 200 || !params.draftMarkdown.includes("# Plan")) {
+      return {
+        score: 30,
+        verdict: "REFINED",
+        critique: "Draft plan is truncated or contains conversational preamble without the mandatory 6-section RULES.MD structure.",
+        identifiedIssues: [
+          "Plan missing required '# Plan:' root header",
+          "Missing mandatory 6 sections (AS-IS, Non-Goals, Halt Check, RAID, WBS PERT, AC/DoD)",
+          "Draft output contains conversational filler instead of technical specification",
+        ],
+        improvementsApplied: [
+          "Reconstruct complete 6-section RULES.MD architectural plan from scratch",
+          "Directly output pure Markdown starting with '# Plan:'",
+        ],
+        rawReviewMarkdown: "# Audit Score: 30\n# Audit Verdict: NEEDS_REVISION\n\n## Audit Critique\nDraft was incomplete or conversational.\n\n## Key Issues Found\n- Incomplete structure\n\n## Required Refinements\n- Full reconstruction under RULES.MD",
+      };
+    }
+
     const auditorInstruction = `You are a Lead Staff Software Architect and Engineering Auditor reviewing an implementation plan for Antigravity (an autonomous agentic coding harness).
 Your role is to rigorously challenge and score the plan against 5 criteria:
 1. Workspace Reality & Feasibility: Are the referenced files, packages, and frameworks realistic for the workspace?
@@ -272,14 +299,28 @@ Audit this plan with high engineering standards.`;
         rawReviewMarkdown: raw,
       };
     } catch {
-      return {
-        score: 92,
-        verdict: "APPROVED",
-        critique: "Architect validation completed.",
-        identifiedIssues: [],
-        improvementsApplied: [],
-        rawReviewMarkdown: "Validation passed.",
-      };
+      // Deterministic fallback validation via RulesEngine
+      const localCheck = RulesEngine.validateMarkdownPlan(params.draftMarkdown, params.workspaceRoot);
+      if (localCheck.valid && params.draftMarkdown.length >= 800) {
+        return {
+          score: 90,
+          verdict: "APPROVED",
+          critique: "Architect validation verified all RULES.MD invariants successfully.",
+          identifiedIssues: [],
+          improvementsApplied: [],
+          rawReviewMarkdown: "Validation passed with full compliance.",
+        };
+      } else {
+        const issues = localCheck.violations.length > 0 ? localCheck.violations : ["Plan requires structural completion"];
+        return {
+          score: 60,
+          verdict: "REFINED",
+          critique: "Plan audit flagged governance violations or incomplete sections that require refinement.",
+          identifiedIssues: issues,
+          improvementsApplied: ["Synthesize complete 6-section RULES.MD structure with Non-Goals >= 3 and PERT estimates"],
+          rawReviewMarkdown: `# Audit Score: 60\n# Audit Verdict: NEEDS_REVISION\n\n## Key Issues Found\n${issues.map((v) => `- ${v}`).join("\n")}`,
+        };
+      }
     }
   }
 
@@ -304,10 +345,11 @@ ${params.audit.rawReviewMarkdown}
 
 INSTRUCTIONS FOR SELF-CORRECTION:
 1. Directly address and fix every identified issue and required refinement from the auditor.
-2. Ensure every file operation has explicit tags ([NEW], [MODIFY], [TEST]).
+2. Ensure every file operation has explicit tags ([NEW], [MODIFY], [DELETE], [TEST]).
 3. Ensure every single Phase has a concrete, runnable shell verification command.
 4. Reinforce all traps (Windows path/CRLF quirks, race conditions, error boundaries).
-5. Output the complete, pristine, production-grade Final Plan in structured Markdown following the 5-section format.`;
+5. Output the complete, pristine, production-grade Final Plan in structured Markdown following the 6-section RULES.MD format.
+ABSOLUTE CONSTRAINT: Directly begin your output with "# Plan: [Title]". DO NOT output any introductory remarks, explanation of intent, or conversational text.`;
 
     try {
       const refinedResponse = await this.client.generate(refinePrompt, {
@@ -315,7 +357,11 @@ INSTRUCTIONS FOR SELF-CORRECTION:
         thinkingBudget: 4096,
       });
 
-      return refinedResponse.text || params.draftMarkdown;
+      const refinedText = refinedResponse.text?.trim();
+      if (refinedText && refinedText.length > 200 && refinedText.includes("# Plan")) {
+        return refinedText;
+      }
+      return refinedText || params.draftMarkdown;
     } catch {
       return params.draftMarkdown;
     }

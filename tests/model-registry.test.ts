@@ -21,6 +21,9 @@ describe("DynamicModelRegistry", () => {
     "models/gemini-3.6-flash",
     "models/gemini-3.7-flash",
     "models/gemini-3.8-flash",
+    "models/gemini-3.8-live", // live streaming -> discarded
+    "models/gemini-3.8-live-extended-thinking", // live streaming -> discarded
+    "models/gemini-3.5-live-translate-preview", // live streaming -> discarded
     "models/gemini-3.1-flash-image", // image-only -> discarded
     "models/gemini-3.5-transcribe", // audio/transcribe -> discarded
     "models/veo-3.1-generate-preview", // non-gemini -> discarded
@@ -59,7 +62,10 @@ describe("DynamicModelRegistry", () => {
     expect(supportedIds).not.toContain("gemini-2.5-pro");
     expect(supportedIds).not.toContain("gemini-2.0-flash");
 
-    // Specialized non-text models discarded
+    // Specialized non-text and streaming live models discarded
+    expect(supportedIds).not.toContain("gemini-3.8-live");
+    expect(supportedIds).not.toContain("gemini-3.8-live-extended-thinking");
+    expect(supportedIds).not.toContain("gemini-3.5-live-translate-preview");
     expect(supportedIds).not.toContain("gemini-3.1-flash-image");
     expect(supportedIds).not.toContain("gemini-3.5-transcribe");
     expect(supportedIds).not.toContain("veo-3.1-generate-preview");
@@ -132,5 +138,30 @@ describe("DynamicModelRegistry", () => {
         expect(parseFloat(match[1])).toBeGreaterThan(3.0);
       }
     }
+  });
+
+  it("should persist cooldowns to disk across distinct registry instances", () => {
+    // Save cache first
+    registry.saveCache({
+      discoveredAt: new Date().toISOString(),
+      ttlMs: 3600 * 1000,
+      models: [
+        { id: "gemini-3.5-flash", version: 3.5, tier: "PLANNER" },
+        { id: "gemini-3.8-flash", version: 3.8, tier: "PLANNER" },
+      ],
+      discardedLegacyModels: [],
+    });
+
+    // Mark 3.8 throttled on instance 1
+    registry.markThrottled("gemini-3.8-flash", 12 * 3600 * 1000);
+    expect(registry.isThrottled("gemini-3.8-flash")).toBe(true);
+
+    // Create a new instance reading the same cache file
+    const registry2 = new DynamicModelRegistry(cacheFile);
+    expect(registry2.isThrottled("gemini-3.8-flash")).toBe(true);
+
+    const candidates = registry2.getCandidateModels("gemini-3.8-flash");
+    expect(candidates[0]).toBe("gemini-3.5-flash");
+    expect(candidates[candidates.length - 1]).toBe("gemini-3.8-flash");
   });
 });

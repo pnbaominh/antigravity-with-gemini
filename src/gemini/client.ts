@@ -114,8 +114,18 @@ export class GeminiThinkingClient {
 
           // If quota exhausted (429) or unavailable (503), throttle this model and failover immediately
           if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
-            registry.markThrottled(currentModel, 60_000);
+            const isDailyQuota =
+              errMsg.includes("GenerateRequestsPerDay") ||
+              errMsg.includes("free_tier_requests") ||
+              errMsg.includes("per_day");
+            const cooldownMs = isDailyQuota ? 12 * 60 * 60 * 1000 : 60_000;
+            registry.markThrottled(currentModel, cooldownMs);
             break; // Immediately failover to next candidate model
+          }
+
+          if (errMsg.includes("streaming") || errMsg.includes("only supports real-time") || errMsg.includes("not supported for generateContent")) {
+            registry.markThrottled(currentModel, 24 * 60 * 60 * 1000);
+            break; // Skip non-generateContent models
           }
 
           if (errMsg.includes("503") || errMsg.includes("UNAVAILABLE") || errMsg.includes("high demand")) {

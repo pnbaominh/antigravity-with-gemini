@@ -234,5 +234,32 @@ Implement hardened Redis caching with DistributedLock to prevent stampede.
     const phaseOut = planner.extractPhase(sampleArchitectPlan, 99);
     expect(phaseOut).toBeNull();
   });
+
+  it("should reject conversational filler draft and force self-correction into complete plan", async () => {
+    const fillerDraft = "I will start by listing the contents of the root workspace directory...";
+    let callCount = 0;
+    const mockClient = {
+      generate: vi.fn().mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          return { text: fillerDraft, model: "gemini-3.5-flash" };
+        } else {
+          // Refine call
+          return { text: sampleArchitectPlan, model: "gemini-3.5-flash" };
+        }
+      }),
+    } as unknown as GeminiThinkingClient;
+
+    const planner = new GeminiPlanner(mockClient);
+    const result = await planner.createPlan({
+      task: "Build distributed Redis cache",
+      workspaceSummary: "Project: test-repo",
+    });
+
+    expect(result.audit?.verdict).toBe("REFINED");
+    expect(result.audit?.score).toBeLessThan(90);
+    expect(result.title).toBe("Distributed Redis Cache with TTL Invalidation");
+    expect(result.phases).toHaveLength(3);
+  });
 });
 

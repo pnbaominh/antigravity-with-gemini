@@ -190,7 +190,8 @@ export class RulesEngine {
     const unknownsSectionMatch = markdown.match(/## [^\n]*Unknowns?[\s\S]*?(?=\n## |$)/i);
     if (unknownsSectionMatch) {
       const text = unknownsSectionMatch[0];
-      if (/status:\s*halt/i.test(text) || /halt on unknown/i.test(text)) {
+      const isStatusClear = /status:\s*clear/i.test(text);
+      if (/status:\s*halt/i.test(text)) {
         haltOnUnknownTriggered = true;
       }
       const lines = text.split('\n');
@@ -198,13 +199,21 @@ export class RulesEngine {
         const match = line.match(/^(?:[-*]|\d+\.)\s+(.+)$/);
         if (match) {
           const item = match[1].trim();
-          if (!item.toLowerCase().includes("none") && !item.toLowerCase().includes("(none)") && !item.toLowerCase().includes("status:")) {
-            unknownsList.push(item);
-            haltOnUnknownTriggered = true;
+          if (
+            !item.toLowerCase().includes("none") &&
+            !item.toLowerCase().includes("(none)") &&
+            !item.toLowerCase().includes("status:") &&
+            !item.toLowerCase().includes("unknowns & verification") &&
+            !item.toLowerCase().includes("unknowns:")
+          ) {
+            if (!isStatusClear) {
+              unknownsList.push(item);
+              haltOnUnknownTriggered = true;
+            }
           }
         }
       }
-    } else if (/halt on unknown/i.test(markdown)) {
+    } else if (/halt on unknown/i.test(markdown) && !/status:\s*clear/i.test(markdown)) {
       haltOnUnknownTriggered = true;
       unknownsList.push("Halt on Unknown declared in plan text.");
     }

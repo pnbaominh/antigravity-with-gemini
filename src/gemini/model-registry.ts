@@ -15,19 +15,20 @@ export interface ModelCacheData {
   ttlMs: number;
   models: DiscoveredModel[];
   discardedLegacyModels: string[];
+  cooldowns?: Record<string, number>;
 }
 
 export const MIN_GEMINI_VERSION = 3.1; // Filter out <= 3.0 (2.5, 2.0, 1.5, 3.0-preview)
 
 export const DEFAULT_MODERN_MODELS = {
-  PLANNER: "gemini-3.8-flash",
-  THINKING: "gemini-3.8-flash",
+  PLANNER: "gemini-3.5-flash",
+  THINKING: "gemini-3.5-flash",
   FAST: "gemini-3.5-flash-lite",
   FALLBACK_CHAIN: [
+    "gemini-3.5-flash",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
     "gemini-3.6-flash",
-    "gemini-3.5-flash",
     "gemini-3.1-pro-preview",
     "gemini-3.1-flash-lite",
   ],
@@ -52,7 +53,7 @@ export class DynamicModelRegistry {
 
   /**
    * Filters raw model IDs from Google API, keeping only text-capable models > 3.0
-   * and discarding legacy versions <= 3.0.
+   * and discarding legacy versions <= 3.0 and streaming-only WebSocket models.
    */
   public filterSupportedModels(rawModelIds: string[]): {
     supported: DiscoveredModel[];
@@ -61,8 +62,8 @@ export class DynamicModelRegistry {
     const supported: DiscoveredModel[] = [];
     const discarded: string[] = [];
 
-    // Blacklist patterns that are not general-purpose text/planning models
-    const nonTextBlacklist = /(image|tts|transcribe|clip|audio|robotics|customtools|embedding|aqa|veo|lyria)/i;
+    // Blacklist patterns that are not general-purpose text/planning models (including live streaming models)
+    const nonTextBlacklist = /(image|tts|transcribe|clip|audio|robotics|customtools|embedding|aqa|veo|lyria|live)/i;
 
     for (const rawName of rawModelIds) {
       const cleanId = rawName.replace(/^models\//, "");
@@ -139,6 +140,15 @@ export class DynamicModelRegistry {
         const parsed = JSON.parse(raw) as ModelCacheData;
         if (!this.isCacheExpired(parsed)) {
           this.memoryCache = parsed;
+          // Synchronize disk cooldowns into in-memory map
+          if (parsed.cooldowns) {
+            const now = Date.now();
+            for (const [modelId, expiresAt] of Object.entries(parsed.cooldowns)) {
+              if (expiresAt > now) {
+                this.throttledModels.set(modelId, expiresAt);
+              }
+            }
+          }
           return parsed;
         }
       }
@@ -153,6 +163,18 @@ export class DynamicModelRegistry {
    * Saves cache to disk atomically.
    */
   public saveCache(data: ModelCacheData): void {
+    // Collect active non-expired cooldowns
+    const activeCooldowns: Record<string, number> = {};
+    const now = Date.now();
+    for (const [id, exp] of this.throttledModels.entries()) {
+      if (exp > now) {
+        activeCooldowns[id] = exp;
+      }
+    }
+    if (Object.keys(activeCooldowns).length > 0) {
+      data.cooldowns = activeCooldowns;
+    }
+
     this.memoryCache = data;
     try {
       fs.mkdirSync(path.dirname(this.cacheFilePath), { recursive: true });
@@ -215,18 +237,37 @@ export class DynamicModelRegistry {
 
   /**
    * Mark a model as temporarily throttled (e.g. 429 quota exhaustion).
+   * Persists cooldown timestamp directly to disk cache.
    */
   public markThrottled(modelId: string, cooldownMs: number = 60_000): void {
     this.throttledModels.set(modelId, Date.now() + cooldownMs);
+    const cache = this.loadCache();
+    if (cache) {
+      this.saveCache(cache);
+    }
   }
 
   /**
    * Check if a model is currently in cooldown.
+   * Checks both in-memory map and disk-persisted cache.
    */
   public isThrottled(modelId: string): boolean {
-    const expiresAt = this.throttledModels.get(modelId);
+    const now = Date.now();
+    let expiresAt = this.throttledModels.get(modelId);
+
+    // If not in memory, check disk cache
+    if (!expiresAt) {
+      const cache = this.loadCache();
+      if (cache?.cooldowns?.[modelId]) {
+        expiresAt = cache.cooldowns[modelId];
+        if (expiresAt > now) {
+          this.throttledModels.set(modelId, expiresAt);
+        }
+      }
+    }
+
     if (!expiresAt) return false;
-    if (Date.now() > expiresAt) {
+    if (now > expiresAt) {
       this.throttledModels.delete(modelId);
       return false;
     }
