@@ -184,4 +184,47 @@ Implement hardened Redis caching with DistributedLock to prevent stampede.
     expect(result.compactMarkdown).toContain("Hardened Distributed Redis Cache with Mutex Lock");
     expect(result.compactMarkdown).toContain("**Gemini Architect Score:** 78/100");
   });
+
+  it("should generate a zero-token pointer ticket with metadata and file path", () => {
+    const dummyClient = {} as GeminiThinkingClient;
+    const planner = new GeminiPlanner(dummyClient);
+
+    const ticketJson = planner.generatePointerTicket({
+      planId: "plan-test-123",
+      title: "Test Plan Title",
+      artifactPath: "c:/repo/.g2a/plans/plan-test-123.md",
+      totalPhases: 3,
+      auditScore: 92,
+      auditVerdict: "APPROVED",
+    });
+
+    const parsed = JSON.parse(ticketJson);
+    expect(parsed.status).toBe("READY");
+    expect(parsed.planId).toBe("plan-test-123");
+    expect(parsed.score).toBe(92);
+    expect(parsed.totalPhases).toBe(3);
+    expect(parsed.artifactFile).toBe("c:/repo/.g2a/plans/plan-test-123.md");
+    expect(ticketJson.length).toBeLessThan(400);
+  });
+
+  it("should extract individual phase on-demand (JIT)", () => {
+    const dummyClient = {} as GeminiThinkingClient;
+    const planner = new GeminiPlanner(dummyClient);
+
+    const phase1 = planner.extractPhase(sampleArchitectPlan, 1);
+    expect(phase1).not.toBeNull();
+    expect(phase1?.phaseIndex).toBe(1);
+    expect(phase1?.totalPhases).toBe(3);
+    expect(phase1?.tasks).toHaveLength(2);
+    expect(phase1?.verification).toBe("npm test tests/cache-types.test.ts");
+    expect(phase1?.markdown).toContain("Task 1.1: Create ICacheProvider");
+
+    const phase2 = planner.extractPhase(sampleArchitectPlan, 2);
+    expect(phase2?.phaseIndex).toBe(2);
+    expect(phase2?.tasks).toHaveLength(2);
+
+    const phaseOut = planner.extractPhase(sampleArchitectPlan, 99);
+    expect(phaseOut).toBeNull();
+  });
 });
+

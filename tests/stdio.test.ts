@@ -5,11 +5,13 @@ import os from "node:os";
 import { writeAntigravityMcpSchemas, TOOL_SCHEMAS } from "../src/mcp/schemas.js";
 
 describe("MCP Schemas and Stdio Transport", () => {
-  it("should have schemas for all 12 tools", () => {
+  it("should have schemas for all 14 tools", () => {
     const keys = Object.keys(TOOL_SCHEMAS);
-    expect(keys.length).toBe(12);
+    expect(keys.length).toBe(14);
     expect(keys).toContain("workspace_info");
     expect(keys).toContain("gemini_plan");
+    expect(keys).toContain("gemini_get_phase");
+    expect(keys).toContain("gemini_active_plan");
     expect(keys).toContain("gemini_review");
     expect(keys).toContain("gemini_think");
   });
@@ -18,7 +20,7 @@ describe("MCP Schemas and Stdio Transport", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "g2a-schemas-test-"));
     try {
       const written = writeAntigravityMcpSchemas(tempDir);
-      expect(written.length).toBe(13); // 12 tools + instructions.md
+      expect(written.length).toBe(15); // 14 tools + instructions.md
       expect(fs.existsSync(path.join(tempDir, "gemini_plan.json"))).toBe(true);
       expect(fs.existsSync(path.join(tempDir, "instructions.md"))).toBe(true);
 

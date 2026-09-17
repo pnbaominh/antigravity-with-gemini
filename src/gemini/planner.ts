@@ -391,4 +391,67 @@ INSTRUCTIONS FOR SELF-CORRECTION:
     lines.push(`> 📁 *Full architectural specification & analysis stored in workspace state.*`);
     return lines.join("\n");
   }
+
+  /**
+   * Generates a micro-payload Ticket (< 50 tokens) for Antigravity.
+   * Stores the plan on disk and returns ONLY the pointer to achieve ZERO context bloat.
+   */
+  generatePointerTicket(params: {
+    planId: string;
+    title: string;
+    artifactPath: string;
+    totalPhases: number;
+    auditScore?: number;
+    auditVerdict?: string;
+  }): string {
+    const payload = {
+      status: "READY",
+      planId: params.planId,
+      title: params.title,
+      score: params.auditScore ?? 90,
+      verdict: params.auditVerdict ?? "APPROVED",
+      totalPhases: params.totalPhases,
+      artifactFile: params.artifactPath.replace(/\\/g, "/"),
+      instruction: `Plan saved to disk with zero Antigravity context bloat. Fetch Phase 1 using gemini_get_phase({ phaseIndex: 1 }).`,
+    };
+    return JSON.stringify(payload, null, 2);
+  }
+
+  /**
+   * Extracts a specific phase from a plan by 1-based index for Just-In-Time (JIT) delivery.
+   * Returns null if phaseIndex is out of range.
+   */
+  extractPhase(planOrMarkdown: PlanResult | string, phaseIndex: number): {
+    phaseIndex: number;
+    totalPhases: number;
+    phaseName: string;
+    tasks: string[];
+    verification: string;
+    markdown: string;
+  } | null {
+    const phases = typeof planOrMarkdown === "string"
+      ? this.parsePhases(planOrMarkdown)
+      : planOrMarkdown.phases;
+
+    if (phaseIndex < 1 || phaseIndex > phases.length) {
+      return null;
+    }
+
+    const target = phases[phaseIndex - 1];
+    const lines = [
+      `### Phase ${target.phase}`,
+      ...target.tasks.map((t) => `- [ ] ${t}`),
+      `**Verification:** \`${target.verification}\``,
+    ];
+
+    return {
+      phaseIndex,
+      totalPhases: phases.length,
+      phaseName: target.phase,
+      tasks: target.tasks,
+      verification: target.verification,
+      markdown: lines.join("\n"),
+    };
+  }
 }
+

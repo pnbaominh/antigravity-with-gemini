@@ -24,6 +24,8 @@ describe("MCP Server Tools Registration", () => {
       expect(toolNames).toContain("execution_summary");
       expect(toolNames).toContain("execution_output");
       expect(toolNames).toContain("gemini_plan");
+      expect(toolNames).toContain("gemini_get_phase");
+      expect(toolNames).toContain("gemini_active_plan");
       expect(toolNames).toContain("gemini_review");
       expect(toolNames).toContain("gemini_think");
     }

@@ -97,4 +97,39 @@ describe("PlanHistoryStore", () => {
     expect(retrieved?.compactMarkdown).toBe("# Compact Query Plan");
     expect(retrieved?.reviewScore).toBe(96);
   });
+
+  it("should track and switch active plan via active-plan.json", () => {
+    const p1 = store.savePlan({
+      task: "Task 1",
+      source: "cli",
+      model: "gemini-3.6-flash",
+      title: "Plan 1",
+      summary: "Summary 1",
+      phases: [],
+      rawMarkdown: "# Plan 1",
+    });
+
+    const p2 = store.savePlan({
+      task: "Task 2",
+      source: "web",
+      model: "gemini-3.6-flash",
+      title: "Plan 2",
+      summary: "Summary 2",
+      phases: [],
+      rawMarkdown: "# Plan 2",
+    });
+
+    // By default, latest saved plan is active
+    expect(store.getActivePlan()?.id).toBe(p2.id);
+
+    // Switch active plan to p1
+    const switched = store.setActivePlan(p1.id);
+    expect(switched?.id).toBe(p1.id);
+    expect(store.getActivePlan()?.id).toBe(p1.id);
+
+    // Can lookup by ID
+    expect(store.getPlanById(p2.id)?.title).toBe("Plan 2");
+    expect(store.getPlanById("non-existent")).toBeNull();
+  });
 });
+

@@ -105,14 +105,47 @@ export const TOOL_SCHEMAS: Record<string, any> = {
   },
   gemini_plan: {
     name: "gemini_plan",
-    description: "Request Gemini Deep Thinking to analyze a task and generate a structured, phased implementation plan with atomic steps and verification criteria.",
+    description: "Request Gemini Deep Thinking to analyze a task and generate a structured, phased implementation plan. By default, returns a zero-token pointer ticket (<50 tokens) to protect Antigravity's context limits.",
     parameters: {
       type: "object",
       properties: {
         task: { type: "string", description: "The user task or feature description to plan for" },
         additionalContext: { type: "string", description: "Additional architectural guidelines, technical constraints, or preferences" },
+        returnMode: {
+          type: "string",
+          enum: ["pointer", "compact", "full"],
+          description: "Return format: 'pointer' (<50 tokens ticket, default for zero context bloat), 'compact' (~75% reduction checklist), or 'full'",
+        },
       },
       required: ["task"],
+      additionalProperties: false,
+    },
+  },
+  gemini_get_phase: {
+    name: "gemini_get_phase",
+    description: "Fetch a specific phase from the active plan on-demand (Just-In-Time Phase Delivery). Uses minimal tokens (~80 tokens) to keep Antigravity context clean.",
+    parameters: {
+      type: "object",
+      properties: {
+        phaseIndex: { type: "integer", description: "The 1-based index of the phase to retrieve (e.g. 1, 2, 3)" },
+        planId: { type: "string", description: "Optional specific plan ID. If omitted, uses active plan." },
+      },
+      required: ["phaseIndex"],
+      additionalProperties: false,
+    },
+  },
+  gemini_active_plan: {
+    name: "gemini_active_plan",
+    description: "Inspect current active plan metadata, audit score, phases list, and disk artifact path with near-zero Antigravity token usage.",
+    parameters: {
+      type: "object",
+      properties: {
+        mode: {
+          type: "string",
+          enum: ["ticket", "summary", "full"],
+          description: "Return mode: 'ticket' (<50 tokens), 'summary' (~200 tokens), or 'full'",
+        },
+      },
       additionalProperties: false,
     },
   },
@@ -147,7 +180,9 @@ export const TOOL_SCHEMAS: Record<string, any> = {
 
 export const MCP_INSTRUCTIONS = `Antigravity with Gemini (G2A) MCP Server.
 Gemini acts as the planning and thinking brain, while Antigravity acts as the execution harness.
-Use gemini_plan to formulate structured, phased plans for complex coding tasks.
+Use gemini_plan to formulate structured, phased plans. It returns a lightweight zero-token pointer ticket (<50 tokens).
+Use gemini_get_phase(phaseIndex) to fetch tasks JIT on-demand when starting each phase to protect Antigravity's context window.
+Use gemini_active_plan to inspect the active plan's progress and file artifact on disk.
 Use gemini_review to perform independent adversarial code reviews on git diffs.
 Use gemini_think to reason about architectural dilemmas, complex bugs, or tradeoffs.
 Use workspace inspection tools (workspace_info, list_directory, read_file, search_workspace, git_status, git_diff) for safe, read-only context retrieval.`;

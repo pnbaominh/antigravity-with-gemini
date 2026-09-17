@@ -29,12 +29,14 @@ export class PlanHistoryStore {
   private workspaceRoot: string;
   private filePath: string;
   private plansDir: string;
+  private activePlanPath: string;
 
   constructor(workspaceRoot: string) {
     this.workspaceRoot = workspaceRoot;
     const dir = getWorkspaceStateDirectory(workspaceRoot);
     this.filePath = path.join(dir, "plans_history.json");
     this.plansDir = path.join(this.workspaceRoot, ".g2a", "plans");
+    this.activePlanPath = path.join(this.workspaceRoot, ".g2a", "active-plan.json");
   }
 
   getPlans(limit = 20): StoredPlan[] {
@@ -49,9 +51,52 @@ export class PlanHistoryStore {
     }
   }
 
+  getPlanById(id: string): StoredPlan | null {
+    const plans = this.getPlans(100);
+    return plans.find((p) => p.id === id) || null;
+  }
+
   getLatestPlan(): StoredPlan | null {
     const plans = this.getPlans();
     return plans.length > 0 ? plans[plans.length - 1] : null;
+  }
+
+  getActivePlan(): StoredPlan | null {
+    try {
+      if (fs.existsSync(this.activePlanPath)) {
+        const activeMeta = JSON.parse(fs.readFileSync(this.activePlanPath, "utf8"));
+        if (activeMeta && activeMeta.id) {
+          const plan = this.getPlanById(activeMeta.id);
+          if (plan) return plan;
+        }
+      }
+    } catch {
+      // Fallback
+    }
+    return this.getLatestPlan();
+  }
+
+  setActivePlan(id: string): StoredPlan | null {
+    const plan = this.getPlanById(id);
+    if (!plan) return null;
+
+    try {
+      const activeMeta = {
+        id: plan.id,
+        timestamp: plan.timestamp,
+        title: plan.title,
+        task: plan.task,
+        totalPhases: plan.phases.length,
+        artifactPath: plan.artifactPath,
+        reviewScore: plan.reviewScore,
+        reviewVerdict: plan.reviewVerdict,
+      };
+      fs.mkdirSync(path.dirname(this.activePlanPath), { recursive: true });
+      fs.writeFileSync(this.activePlanPath, JSON.stringify(activeMeta, null, 2), "utf8");
+    } catch {
+      // Non-fatal
+    }
+    return plan;
   }
 
   savePlan(plan: Omit<StoredPlan, "id" | "timestamp">): StoredPlan {
@@ -84,6 +129,25 @@ export class PlanHistoryStore {
       fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(this.filePath, JSON.stringify(trimmed, null, 2), "utf8");
+
+    // Automatically set as active plan
+    try {
+      const activeMeta = {
+        id: stored.id,
+        timestamp: stored.timestamp,
+        title: stored.title,
+        task: stored.task,
+        totalPhases: stored.phases.length,
+        artifactPath: stored.artifactPath,
+        reviewScore: stored.reviewScore,
+        reviewVerdict: stored.reviewVerdict,
+      };
+      fs.mkdirSync(path.dirname(this.activePlanPath), { recursive: true });
+      fs.writeFileSync(this.activePlanPath, JSON.stringify(activeMeta, null, 2), "utf8");
+    } catch {
+      // Non-fatal
+    }
+
     return stored;
   }
 }

@@ -161,6 +161,47 @@ export class BridgeServer {
       return;
     }
 
+    // Get active plan
+    if (pathname === "/api/plan/active" && req.method === "GET") {
+      const active = this.historyStore.getActivePlan();
+      if (!active) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "No active plan found" }));
+        return;
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, plan: active }));
+      return;
+    }
+
+    // Get specific phase from active plan (or specific plan by query)
+    const phaseMatch = pathname.match(/^\/api\/plan\/phase\/(\d+)$/);
+    if (phaseMatch && req.method === "GET") {
+      const phaseIndex = parseInt(phaseMatch[1], 10);
+      const planId = parsedUrl.searchParams.get("planId");
+      const plan = planId ? this.historyStore.getPlanById(planId) : this.historyStore.getActivePlan();
+      if (!plan) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "No plan found" }));
+        return;
+      }
+
+      const phase = this.planner.extractPhase(plan.rawMarkdown, phaseIndex);
+      if (!phase) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: `Phase ${phaseIndex} not found. Total phases: ${plan.phases.length}`,
+          })
+        );
+        return;
+      }
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, phase, planTitle: plan.title, planId: plan.id }));
+      return;
+    }
+
     // Create a plan directly from Web Studio
     if (pathname === "/api/plan" && req.method === "POST") {
       const body = await this.readJsonBody(req);
