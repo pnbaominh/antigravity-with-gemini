@@ -103,7 +103,7 @@ export class BridgeServer {
     const pathname = parsedUrl.pathname;
 
     // Health check
-    if (pathname === "/api/health") {
+    if (pathname === "/health" || pathname === "/api/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({

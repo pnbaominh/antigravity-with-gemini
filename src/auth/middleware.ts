@@ -17,6 +17,7 @@ export function createAuthMiddleware(tokenStore: TokenStore, workspaceRoot: stri
     // Whitelisted routes
     const url = req.url || "/";
     if (
+      url.startsWith("/health") ||
       url.startsWith("/api/health") ||
       url.startsWith("/api/pair") ||
       url.startsWith("/oauth/authorize") ||

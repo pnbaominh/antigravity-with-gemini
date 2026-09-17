@@ -1,10 +1,47 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import { getWorkspaceStateDirectory } from "../config/paths.js";
 import { DEFAULT_PORT } from "../config/constants.js";
 import { findAvailablePort } from "./port.js";
+
+function isProcessAlive(pid: number): boolean {
+  if (process.platform === "win32") {
+    try {
+      const stdout = execSync(`tasklist /fi "PID eq ${pid}" /fo csv /nh`, {
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      return stdout.toLowerCase().includes(`"${pid}"`);
+    } catch {
+      return false;
+    }
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+
+async function probeBridge(port: number, workspaceRoot: string): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1500);
+    const res = await fetch(`http://127.0.0.1:${port}/api/health`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return false;
+    const body: any = await res.json();
+    return body.status === "ok" && path.resolve(body.workspace) === path.resolve(workspaceRoot);
+  } catch {
+    return false;
+  }
+}
 
 export interface DaemonStatus {
   isRunning: boolean;
@@ -31,24 +68,19 @@ export class BridgeRuntime {
 
     try {
       const data = JSON.parse(fs.readFileSync(pidFile, "utf-8"));
-      if (!data.pid) return { isRunning: false };
+      if (!data.port) return { isRunning: false };
 
-      // Check if process is running
-      let isAlive = false;
-      try {
-        process.kill(data.pid, 0);
-        isAlive = true;
-      } catch {
-        isAlive = false;
-      }
+      // Verify via HTTP health probe and process table
+      const isHealthy = await probeBridge(data.port, this.workspaceRoot);
+      const isAlive = data.pid ? isProcessAlive(data.pid) : false;
 
-      if (!isAlive) {
-        fs.unlinkSync(pidFile);
+      if (!isHealthy && !isAlive) {
+        try { fs.unlinkSync(pidFile); } catch {}
         return { isRunning: false };
       }
 
       return {
-        isRunning: true,
+        isRunning: isHealthy || isAlive,
         pid: data.pid,
         port: data.port,
         url: data.url,
@@ -123,7 +155,11 @@ export class BridgeRuntime {
 
     try {
       if (process.platform === "win32") {
-        spawn("taskkill", ["/pid", status.pid.toString(), "/f", "/t"]);
+        try {
+          execSync(`taskkill /pid ${status.pid} /f /t`, { stdio: "ignore" });
+        } catch {
+          // ignore
+        }
       } else {
         process.kill(status.pid, "SIGTERM");
       }
