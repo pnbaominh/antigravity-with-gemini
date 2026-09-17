@@ -1,0 +1,48 @@
+{
+  "name": "antigravity-with-gemini",
+  "version": "1.0.0",
+  "description": "Gemini thinks. Antigravity works. Use Google Gemini as the planning & thinking brain while keeping the Antigravity harness.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "g2a": "./bin/g2a.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -w -p tsconfig.json",
+    "start": "node ./dist/cli/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "antigravity",
+    "gemini",
+    "mcp",
+    "model-context-protocol",
+    "thinking",
+    "planning",
+    "agentic-coding",
+    "ai-agent"
+  ],
+  "author": "Bminh <mthui9181@gmail.com>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@google/genai": "^2.23.0",
+    "@modelcontextprotocol/sdk": "^1.6.1",
+    "commander": "^13.1.0",
+    "dotenv": "^16.4.7",
+    "ignore": "^7.0.3",
+    "picocolors": "^1.1.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  }
+}
