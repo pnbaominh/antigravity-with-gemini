@@ -13,6 +13,7 @@ import {
   tunnelCommand,
   mcpCommand,
   webCommand,
+  modelsCommand,
 } from "./commands.js";
 import { runDoctorChecks, printDoctorReport } from "./doctor.js";
 import { BridgeServer } from "../bridge/server.js";
@@ -125,6 +126,14 @@ program
     await mcpCommand(ws, options);
   });
 
+
+program
+  .command("models")
+  .description("List discovered modern Gemini models (> 3.0) and inspect registry status")
+  .option("-r, --refresh", "Force a live discovery refresh from Google GenAI API")
+  .action(async (options) => {
+    await modelsCommand(options);
+  });
 
 // Internal command used when spawned as detached daemon
 program

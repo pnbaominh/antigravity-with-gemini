@@ -8,6 +8,7 @@ import { getExecutionSummary, getTestStatus } from "../execution/output.js";
 import { PlanHistoryStore } from "../gemini/history.js";
 import { DEFAULT_GEMINI_MODELS } from "../config/constants.js";
 import { RulesEngine } from "../governance/rules-engine.js";
+import { DynamicModelRegistry } from "../gemini/model-registry.js";
 
 export function registerThinkingTools(
   server: any,
@@ -473,6 +474,105 @@ export function registerThinkingTools(
             {
               type: "text",
               text: `PERT calculation failed: ${error?.message || String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "gemini_list_models",
+    "List all discovered modern Gemini models (> 3.0), their tiers, and cooldown/throttle status. Confirms all legacy models <= 3.0 are discarded.",
+    {},
+    async () => {
+      try {
+        const registry = DynamicModelRegistry.getInstance();
+        const cache = registry.loadCache() || await registry.discoverModels(geminiClient.getRawClient() || undefined);
+
+        const lines: string[] = [
+          `# Gemini Modern Models Registry (Strictly > 3.0)`,
+          `- **Discovered At:** ${cache.discoveredAt}`,
+          `- **Minimum Version Enforced:** > 3.0 (Discarded: 3.0, 2.5, 2.0, 1.5)`,
+          ``,
+          `### Active Modern Models:`,
+        ];
+
+        for (const m of cache.models) {
+          const isThrottled = registry.isThrottled(m.id);
+          const status = isThrottled ? "⏳ Throttled (429 Cooldown)" : "✅ Active";
+          lines.push(`- **${m.id}** (v${m.version}, Tier: ${m.tier}) — ${status}`);
+        }
+
+        if (cache.discardedLegacyModels.length > 0) {
+          lines.push(``, `### Discarded Legacy / Specialized Models (<= 3.0 or non-text):`);
+          for (const d of cache.discardedLegacyModels.slice(0, 10)) {
+            lines.push(`- 🚫 ${d}`);
+          }
+          if (cache.discardedLegacyModels.length > 10) {
+            lines.push(`- ...and ${cache.discardedLegacyModels.length - 10} more`);
+          }
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: lines.join("\n"),
+            },
+          ],
+        };
+      } catch (error: any) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Failed to list models: ${error?.message || String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "gemini_refresh_models",
+    "Force a live auto-discovery refresh from Google GenAI API to discover newly released models and update the local registry.",
+    {},
+    async () => {
+      try {
+        const registry = DynamicModelRegistry.getInstance();
+        const rawClient = geminiClient.getRawClient();
+        if (!rawClient) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Gemini API client not configured with API key. Cannot fetch live models from Google.",
+              },
+            ],
+          };
+        }
+
+        const refreshed = await registry.discoverModels(rawClient, true);
+        const supportedList = refreshed.models.map((m) => `${m.id} (v${m.version})`).join(", ");
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `✅ Successfully refreshed Gemini Model Registry from Google GenAI API!\n\n- **Discovered Modern Models (> 3.0):** ${supportedList}\n- **Discarded Legacy Models (<= 3.0):** ${refreshed.discardedLegacyModels.length} models filtered out.`,
+            },
+          ],
+        };
+      } catch (error: any) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Model discovery refresh failed: ${error?.message || String(error)}`,
             },
           ],
         };

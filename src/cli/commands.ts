@@ -19,6 +19,7 @@ import { CloudflaredTunnelProvider } from "../tunnel/cloudflared.js";
 import { saveTunnelState, loadTunnelState, clearTunnelState } from "../tunnel/state.js";
 import { DEFAULT_PORT, DEFAULT_HOST, DEFAULT_GEMINI_MODELS } from "../config/constants.js";
 import { PlanHistoryStore } from "../gemini/history.js";
+import { DynamicModelRegistry } from "../gemini/model-registry.js";
 
 export async function setupCommand(workspaceRoot: string, options: { apiKey?: string }) {
   console.log(pc.bold("\n🚀 Setting up Antigravity with Gemini (G2A)...\n"));
@@ -317,5 +318,34 @@ Hãy xuất kế hoạch theo chuẩn 5 phần nghiêm ngặt:
   console.log(pc.white("2. Bạn chỉ cần nhấn ") + pc.yellow(pc.bold("Ctrl + V")) + pc.white(" vào ô chat và nhấn ") + pc.yellow(pc.bold("Enter")) + pc.white("."));
   console.log(pc.white("3. Bạn sẽ thấy Gemini Thinking suy nghĩ và gõ trực tiếp từng dòng plan trên giao diện web của Google!"));
   console.log(pc.white("4. Sau khi có plan, chỉ cần copy nội dung dán vào chat với Antigravity để bắt đầu tự động thi công code.\n"));
+}
+
+export async function modelsCommand(options: { refresh?: boolean }) {
+  console.log(pc.bold("\n🔍 Inspecting Gemini Models Registry (Strictly > 3.0)...\n"));
+
+  const client = new GeminiThinkingClient();
+  const registry = DynamicModelRegistry.getInstance();
+  const raw = client.getRawClient();
+
+  const data = await registry.discoverModels(raw || undefined, options.refresh);
+
+  console.log(pc.bold(`Discovered At: `) + pc.cyan(data.discoveredAt));
+  console.log(pc.bold(`Active Modern Models (> 3.0):`));
+  for (const m of data.models) {
+    const throttled = registry.isThrottled(m.id);
+    const statusText = throttled ? pc.yellow(" [Throttled / 429 Cooldown]") : pc.green(" [Active]");
+    console.log(`  ${pc.cyan("•")} ${pc.bold(m.id)} (v${m.version}, Tier: ${m.tier})${statusText}`);
+  }
+
+  if (data.discardedLegacyModels.length > 0) {
+    console.log(pc.dim(`\nDiscarded Legacy Models (<= 3.0 or non-text):`));
+    for (const d of data.discardedLegacyModels.slice(0, 8)) {
+      console.log(pc.dim(`  ✕ ${d}`));
+    }
+    if (data.discardedLegacyModels.length > 8) {
+      console.log(pc.dim(`  ...and ${data.discardedLegacyModels.length - 8} more`));
+    }
+  }
+  console.log("");
 }
 

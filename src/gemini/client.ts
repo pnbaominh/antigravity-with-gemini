@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { DEFAULT_GEMINI_MODELS } from "../config/constants.js";
 import { getSavedGeminiApiKey } from "../config/paths.js";
+import { DynamicModelRegistry } from "./model-registry.js";
 
 export interface GeminiCallOptions {
   model?: string;
@@ -41,6 +42,15 @@ export class GeminiThinkingClient {
     this.client = new GoogleGenAI({ apiKey: key });
   }
 
+  getModelRegistry(): DynamicModelRegistry {
+    return DynamicModelRegistry.getInstance();
+  }
+
+  getRawClient(): GoogleGenAI | null {
+    this.isConfigured();
+    return this.client;
+  }
+
   async generate(
     prompt: string,
     options: GeminiCallOptions = {}
@@ -79,19 +89,12 @@ export class GeminiThinkingClient {
       config.temperature = options.temperature;
     }
 
-    const fallbackModels = [
-      modelName,
-      DEFAULT_GEMINI_MODELS.FAST,
-      "gemini-2.5-flash",
-      "gemini-2.0-flash",
-      "gemini-3.8-flash",
-    ].filter(
-      (m, idx, arr) => arr.indexOf(m) === idx
-    );
+    const registry = DynamicModelRegistry.getInstance();
+    const candidateModels = registry.getCandidateModels(modelName);
 
     let lastError: any;
-    for (const currentModel of fallbackModels) {
-      for (let attempt = 0; attempt < 3; attempt++) {
+    for (const currentModel of candidateModels) {
+      for (let attempt = 0; attempt < 2; attempt++) {
         const modelConfig = { ...config };
         try {
           const response = await client.models.generateContent({
@@ -109,17 +112,20 @@ export class GeminiThinkingClient {
           lastError = error;
           const errMsg = error?.message || String(error);
 
-          // If temporary demand spike (503 / 429), back off and retry same model
-          const isTransient =
-            errMsg.includes("503") ||
-            errMsg.includes("high demand") ||
-            errMsg.includes("UNAVAILABLE") ||
-            errMsg.includes("429") ||
-            errMsg.includes("RESOURCE_EXHAUSTED");
+          // If quota exhausted (429) or unavailable (503), throttle this model and failover immediately
+          if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+            registry.markThrottled(currentModel, 60_000);
+            break; // Immediately failover to next candidate model
+          }
 
-          if (isTransient && attempt < 2) {
-            await new Promise((r) => setTimeout(r, (attempt + 1) * 1500));
-            continue;
+          if (errMsg.includes("503") || errMsg.includes("UNAVAILABLE") || errMsg.includes("high demand")) {
+            registry.markThrottled(currentModel, 30_000);
+            if (attempt === 0) {
+              // Quick 1s retry before failing over
+              await new Promise((r) => setTimeout(r, 1000));
+              continue;
+            }
+            break; // Failover to next candidate model
           }
 
           // If thinking mode is not supported by chosen model, retry without thinkingConfig
@@ -139,7 +145,7 @@ export class GeminiThinkingClient {
               lastError = retryError;
             }
           }
-          break; // move to next fallback model
+          break; // move to next candidate model
         }
       }
     }

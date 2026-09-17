@@ -202,16 +202,37 @@ export const TOOL_SCHEMAS: Record<string, any> = {
       additionalProperties: false,
     },
   },
+  gemini_list_models: {
+    name: "gemini_list_models",
+    description: "List all discovered modern Gemini models (> 3.0), their tiers, and cooldown/throttle status. Confirms all legacy models <= 3.0 are discarded.",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  gemini_refresh_models: {
+    name: "gemini_refresh_models",
+    description: "Force a live auto-discovery refresh from Google GenAI API to discover newly released models and update the local registry.",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
 };
 
 export const MCP_INSTRUCTIONS = `Antigravity with Gemini (G2A) MCP Server.
 Gemini acts as the planning and thinking brain, while Antigravity acts as the execution harness.
 All plans strictly adhere to the RULES.MD Technical Governance Framework.
+The system automatically discovers modern Gemini models (> 3.0) and discards legacy models (<= 3.0).
 Use gemini_plan to formulate structured, phased plans. It returns a lightweight zero-token pointer ticket (<50 tokens).
 Use gemini_get_phase(phaseIndex) to fetch tasks JIT on-demand when starting each phase to protect Antigravity's context window.
 Use gemini_active_plan to inspect the active plan's progress and file artifact on disk.
 Use gemini_validate_plan to verify plan compliance against RULES.MD axioms (Non-Goals >= 3, AS-IS Grounding, Single DRI, PERT math).
 Use gemini_calculate_pert to compute statistical estimates (E and Sigma).
+Use gemini_list_models to inspect active modern models (> 3.0) and cooldown states.
+Use gemini_refresh_models to trigger live discovery of new models from Google API.
 Use gemini_review to perform independent adversarial code reviews on git diffs.
 Use gemini_think to reason about architectural dilemmas, complex bugs, or tradeoffs.
 Use workspace inspection tools (workspace_info, list_directory, read_file, search_workspace, git_status, git_diff) for safe, read-only context retrieval.`;
