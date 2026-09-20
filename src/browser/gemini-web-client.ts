@@ -912,90 +912,172 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
    */
   public async ensureBestModel(page: Page, requestedModel?: string): Promise<void> {
     try {
-      const target = (
+      const rawTarget = (
         requestedModel ||
         this.config.preferredModel ||
         process.env.GEMINI_MODEL ||
-        "3.8 Flash" // Newest model prioritized by default!
+        "3.8 Flash"
       ).toLowerCase();
 
-      const modelSelector = page
-        .locator(
-          'button[data-test-id="bard-mode-menu-button"], button.input-area-switch, [aria-label*="chọn mô hình"], [aria-label*="model"]'
-        )
-        .first();
-      if (await modelSelector.isVisible()) {
-        const currentText = await modelSelector.innerText();
+      // Normalize target key: "3.8", "3.1", or "3.5"
+      let targetKey = "3.8";
+      if (rawTarget.includes("3.5") || rawTarget.includes("lite")) {
+        targetKey = "3.5";
+      } else if (rawTarget.includes("3.1") || rawTarget.includes("pro")) {
+        targetKey = "3.1";
+      } else {
+        targetKey = "3.8";
+      }
 
-        // 1. Target is 3.8 Flash (Newest model)
-        if (target.includes("3.8") || (target.includes("flash") && !target.includes("lite"))) {
-          if (currentText.includes("Flash") && !currentText.includes("Lite")) {
-            return;
-          }
-          await modelSelector.click();
-          await page.waitForTimeout(800);
-          const flashOption = page
-            .locator(
-              '[role="menuitem"]:has-text("3.8 Flash"), [role="menuitemradio"]:has-text("3.8 Flash"), [role="menuitem"]:has-text("Flash"), button:has-text("3.8 Flash"), button:has-text("Flash")'
-            )
-            .first();
-          if (await flashOption.isVisible()) {
-            await flashOption.click();
-            await page.waitForTimeout(1000);
-            return;
-          }
-        } else if (target.includes("lite") || target.includes("3.5")) {
-          // 2. Target is 3.5 Flash-Lite
-          if (currentText.includes("Lite") || currentText.includes("3.5")) {
-            return;
-          }
-          await modelSelector.click();
-          await page.waitForTimeout(800);
-          const liteOption = page
-            .locator(
-              '[role="menuitem"]:has-text("3.5 Flash-Lite"), [role="menuitemradio"]:has-text("3.5 Flash-Lite"), button:has-text("3.5 Flash-Lite")'
-            )
-            .first();
-          if (await liteOption.isVisible()) {
-            await liteOption.click();
-            await page.waitForTimeout(1000);
-            return;
-          }
-        } else {
-          // 3. Target is 3.1 Pro
-          if (currentText.includes("Pro")) {
-            return;
-          }
-          await modelSelector.click();
-          await page.waitForTimeout(800);
-          const proOption = page
-            .locator(
-              '[role="menuitem"]:has-text("3.1 Pro"), [role="menuitemradio"]:has-text("3.1 Pro"), [role="menuitem"]:has-text("Pro"), button:has-text("3.1 Pro"), button:has-text("Pro")'
-            )
-            .first();
-          if (await proOption.isVisible()) {
-            await proOption.click();
-            await page.waitForTimeout(1000);
-            return;
-          }
-
-          // Fallback to 3.8 Flash if Pro option not available
-          const flashOption = page
-            .locator(
-              '[role="menuitem"]:has-text("3.8 Flash"), [role="menuitemradio"]:has-text("3.8 Flash"), button:has-text("3.8 Flash")'
-            )
-            .first();
-          if (await flashOption.isVisible()) {
-            await flashOption.click();
-            await page.waitForTimeout(1000);
-            return;
+      // Step 1: Detect current model on the button
+      const currentText = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+        for (const b of buttons) {
+          const text = (b.textContent || "").trim();
+          const aria = (b.getAttribute("aria-label") || "").toLowerCase();
+          const testId = (b.getAttribute("data-test-id") || "").toLowerCase();
+          if (
+            testId.includes("mode-menu") ||
+            testId.includes("model") ||
+            aria.includes("mô hình") ||
+            aria.includes("model") ||
+            text.includes("Pro Mở rộng") ||
+            text.includes("Flash Mở rộng") ||
+            text.includes("3.8 Flash") ||
+            text.includes("3.1 Pro") ||
+            text.includes("3.5 Flash-Lite") ||
+            (b.getAttribute("aria-haspopup") === "menu" &&
+              (text.includes("Pro") || text.includes("Flash") || text.includes("Lite")))
+          ) {
+            return text;
           }
         }
+        return "";
+      });
 
-        await page.keyboard.press("Escape");
+      // Check if already on the target model
+      if (targetKey === "3.8") {
+        if (
+          (currentText.includes("3.8") || currentText.includes("Flash")) &&
+          !currentText.includes("Lite") &&
+          !currentText.includes("Pro")
+        ) {
+          return; // Already 3.8 Flash (e.g. "3.8 Flash" or "Flash Mở rộng")
+        }
+      } else if (targetKey === "3.1") {
+        if (currentText.includes("Pro") || currentText.includes("3.1")) {
+          return; // Already 3.1 Pro
+        }
+      } else if (targetKey === "3.5") {
+        if (currentText.includes("Lite") || currentText.includes("3.5")) {
+          return; // Already 3.5 Flash-Lite
+        }
       }
-    } catch {
-      // Graceful fallback if selector structure changes
+
+      // Step 2: Open the model selector menu
+      const opened = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+        for (const b of buttons) {
+          const text = (b.textContent || "").trim();
+          const aria = (b.getAttribute("aria-label") || "").toLowerCase();
+          const testId = (b.getAttribute("data-test-id") || "").toLowerCase();
+          if (
+            testId.includes("mode-menu") ||
+            testId.includes("model") ||
+            aria.includes("mô hình") ||
+            aria.includes("model") ||
+            text.includes("Pro Mở rộng") ||
+            text.includes("Flash Mở rộng") ||
+            text.includes("3.8 Flash") ||
+            text.includes("3.1 Pro") ||
+            text.includes("3.5 Flash-Lite") ||
+            (b.getAttribute("aria-haspopup") === "menu" &&
+              (text.includes("Pro") || text.includes("Flash") || text.includes("Lite")))
+          ) {
+            (b as HTMLElement).click();
+            return true;
+          }
+        }
+        return false;
+      });
+
+      if (!opened) {
+        const fallbackBtn = page
+          .locator(
+            'button[data-test-id="bard-mode-menu-button"], button.input-area-switch, button:has-text("Pro Mở rộng"), button:has-text("Flash Mở rộng"), button:has-text("3.1 Pro"), button:has-text("3.8 Flash"), [aria-label*="chọn mô hình"], [aria-label*="model"]'
+          )
+          .first();
+        if (await fallbackBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+          await fallbackBtn.click();
+        }
+      }
+
+      await page.waitForTimeout(600);
+
+      // Step 3: Select the specific target model item from the open menu
+      const clicked = await page.evaluate((key) => {
+        const candidates = Array.from(
+          document.querySelectorAll(
+            '[role="menuitem"], [role="menuitemradio"], mat-list-item, div.mat-mdc-menu-item, [role="option"], .mat-mdc-menu-item, button'
+          )
+        );
+
+        for (const el of candidates) {
+          const text = (el.textContent || "").trim();
+          // Skip if this is the menu trigger button itself
+          if (el.getAttribute("aria-haspopup") === "menu") continue;
+
+          if (key === "3.8") {
+            // Target 3.8 Flash specifically: MUST contain 3.8, or Flash without Lite and without Mở rộng
+            if (
+              text.includes("3.8") ||
+              (text.includes("Flash") && !text.includes("Lite") && !text.includes("Mở rộng") && !text.includes("Pro"))
+            ) {
+              (el as HTMLElement).click();
+              return true;
+            }
+          } else if (key === "3.1") {
+            // Target 3.1 Pro specifically
+            if (
+              text.includes("3.1") ||
+              (text.includes("Pro") && !text.includes("Flash") && !text.includes("Mở rộng"))
+            ) {
+              (el as HTMLElement).click();
+              return true;
+            }
+          } else if (key === "3.5") {
+            // Target 3.5 Flash-Lite specifically
+            if (text.includes("3.5") || text.includes("Lite")) {
+              (el as HTMLElement).click();
+              return true;
+            }
+          }
+        }
+        return false;
+      }, targetKey);
+
+      if (!clicked) {
+        // Fallback with Playwright locators using version-specific filters
+        const itemLocator = page
+          .locator(
+            targetKey === "3.8"
+              ? '[role="menuitem"]:has-text("3.8"), [role="menuitemradio"]:has-text("3.8"), button:has-text("3.8")'
+              : targetKey === "3.1"
+              ? '[role="menuitem"]:has-text("3.1"), [role="menuitemradio"]:has-text("3.1"), button:has-text("3.1")'
+              : '[role="menuitem"]:has-text("Lite"), [role="menuitemradio"]:has-text("Lite"), button:has-text("Lite")'
+          )
+          .first();
+
+        if (await itemLocator.isVisible({ timeout: 1000 }).catch(() => false)) {
+          await itemLocator.click();
+        }
+      }
+
+      await page.waitForTimeout(800);
+      await page.keyboard.press("Escape").catch(() => {});
+      console.log(`[GeminiWeb] ✓ Model selector updated to target ${targetKey === "3.8" ? "3.8 Flash" : targetKey === "3.1" ? "3.1 Pro" : "3.5 Flash-Lite"}`);
+    } catch (err: any) {
+      console.warn(`[GeminiWeb] Model selection notice: ${err?.message || err}`);
     }
   }
 

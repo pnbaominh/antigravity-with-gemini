@@ -59,6 +59,15 @@ export class BridgeRuntime {
   async getStatus(): Promise<DaemonStatus> {
     const pidFile = path.join(this.stateDir, "daemon.json");
     if (!fs.existsSync(pidFile)) {
+      const defaultHealthy = await probeBridge(DEFAULT_PORT, this.workspaceRoot);
+      if (defaultHealthy) {
+        return {
+          isRunning: true,
+          port: DEFAULT_PORT,
+          url: `http://127.0.0.1:${DEFAULT_PORT}`,
+          workspaceRoot: this.workspaceRoot,
+        };
+      }
       return { isRunning: false };
     }
 
@@ -71,6 +80,15 @@ export class BridgeRuntime {
       const isAlive = data.pid ? isProcessAlive(data.pid) : false;
 
       if (!isHealthy && !isAlive) {
+        const defaultHealthy = await probeBridge(DEFAULT_PORT, this.workspaceRoot);
+        if (defaultHealthy) {
+          return {
+            isRunning: true,
+            port: DEFAULT_PORT,
+            url: `http://127.0.0.1:${DEFAULT_PORT}`,
+            workspaceRoot: this.workspaceRoot,
+          };
+        }
         try { fs.unlinkSync(pidFile); } catch {}
         return { isRunning: false };
       }

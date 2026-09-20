@@ -111,6 +111,10 @@ export const TOOL_SCHEMAS: Record<string, any> = {
       properties: {
         task: { type: "string", description: "The user task or feature description to plan for" },
         additionalContext: { type: "string", description: "Additional architectural guidelines, technical constraints, or preferences" },
+        model: {
+          type: "string",
+          description: "Gemini model to use in Gemini Web (e.g. '3.8 Flash', '3.1 Pro', or '3.5 Flash-Lite'). Defaults to newest '3.8 Flash'.",
+        },
         returnMode: {
           type: "string",
           enum: ["pointer", "compact", "full"],
@@ -157,6 +161,10 @@ export const TOOL_SCHEMAS: Record<string, any> = {
       properties: {
         taskDescription: { type: "string", description: "Description of what this change was intended to accomplish" },
         file: { type: "string", description: "Optional specific file to restrict the diff review to" },
+        model: {
+          type: "string",
+          description: "Gemini model to use (default: '3.8 Flash', or '3.1 Pro', '3.5 Flash-Lite')",
+        },
       },
       required: ["taskDescription"],
       additionalProperties: false,
@@ -171,6 +179,10 @@ export const TOOL_SCHEMAS: Record<string, any> = {
         question: { type: "string", description: "The complex question, bug symptom, or architectural tradeoff to think about" },
         context: { type: "string", description: "Relevant context, error logs, or code snippets" },
         thinkingBudget: { type: "integer", description: "Reasoning token budget (default 8192)" },
+        model: {
+          type: "string",
+          description: "Gemini model to use (default: '3.8 Flash', or '3.1 Pro', '3.5 Flash-Lite')",
+        },
       },
       required: ["question"],
       additionalProperties: false,

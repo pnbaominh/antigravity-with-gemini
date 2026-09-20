@@ -27,6 +27,7 @@ export class GeminiReviewer {
     testStatus?: string;
     taskDescription: string;
     executionSummary?: string;
+    model?: string;
   }): Promise<ReviewResult> {
     const systemInstruction = `You are the master adversarial reviewer for Antigravity coding tasks.
 Your job is to rigorously review the git diff and test output.
@@ -68,6 +69,7 @@ Perform an adversarial, thorough code review. Identify any critical flaws, misse
     const response = await this.client.generate(prompt, {
       systemInstruction,
       thinkingBudget: 8192,
+      model: params.model,
     });
 
     const rawMarkdown = response.text;

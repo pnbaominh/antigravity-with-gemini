@@ -257,8 +257,20 @@ export function registerThinkingTools(
     {
       taskDescription: z.string().describe("Description of what this change was intended to accomplish"),
       file: z.string().optional().describe("Optional specific file to restrict the diff review to"),
+      model: z
+        .string()
+        .optional()
+        .describe("Gemini model to use (default: '3.8 Flash', or '3.1 Pro', '3.5 Flash-Lite')"),
     },
-    async ({ taskDescription, file }: { taskDescription: string; file?: string }) => {
+    async ({
+      taskDescription,
+      file,
+      model,
+    }: {
+      taskDescription: string;
+      file?: string;
+      model?: string;
+    }) => {
       try {
         const diff = getGitDiff(workspaceRoot, { file });
         const testStatus = getTestStatus(workspaceRoot);
@@ -280,6 +292,7 @@ export function registerThinkingTools(
           testStatus,
           taskDescription,
           executionSummary,
+          model,
         });
 
         return {
@@ -315,20 +328,27 @@ export function registerThinkingTools(
         .optional()
         .default(8192)
         .describe("Reasoning token budget (default 8192)"),
+      model: z
+        .string()
+        .optional()
+        .describe("Gemini model to use (default: '3.8 Flash', or '3.1 Pro', '3.5 Flash-Lite')"),
     },
     async ({
       question,
       context,
       thinkingBudget,
+      model,
     }: {
       question: string;
       context?: string;
       thinkingBudget?: number;
+      model?: string;
     }) => {
       try {
         const prompt = `${question}\n\n${context ? `Context:\n${context}` : ""}`;
         const response = await geminiClient.generate(prompt, {
           thinkingBudget: thinkingBudget || 8192,
+          model,
         });
 
         return {
