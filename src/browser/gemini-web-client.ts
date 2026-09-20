@@ -929,31 +929,65 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
         targetKey = "3.8";
       }
 
-      // Step 1: Detect current model on the button
-      const currentText = await page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
-        for (const b of buttons) {
-          const text = (b.textContent || "").trim();
-          const aria = (b.getAttribute("aria-label") || "").toLowerCase();
-          const testId = (b.getAttribute("data-test-id") || "").toLowerCase();
-          if (
-            testId.includes("mode-menu") ||
-            testId.includes("model") ||
-            aria.includes("mô hình") ||
-            aria.includes("model") ||
-            text.includes("Pro Mở rộng") ||
-            text.includes("Flash Mở rộng") ||
-            text.includes("3.8 Flash") ||
-            text.includes("3.1 Pro") ||
-            text.includes("3.5 Flash-Lite") ||
-            (b.getAttribute("aria-haspopup") === "menu" &&
-              (text.includes("Pro") || text.includes("Flash") || text.includes("Lite")))
-          ) {
-            return text;
+      // Step 1: Detect current model on the model selector button (strictly excluding sidebar / user profile)
+      const buttonInfo = await page.evaluate(() => {
+        const isExcluded = (el: Element) => {
+          return !!el.closest(
+            "nav, aside, mat-sidenav, .side-nav, .sidebar, [role='navigation'], [aria-label*='Tài khoản'], [aria-label*='Account']"
+          );
+        };
+
+        // First look inside the input area container
+        const inputArea = document.querySelector(
+          'rich-textarea, div[class*="input-area"], div[class*="bottom"], form, chat-window'
+        );
+        if (inputArea) {
+          const container =
+            inputArea.closest('div[class*="bottom-container"], form, chat-window') ||
+            inputArea.parentElement;
+          const candidates = Array.from(container?.querySelectorAll('button, [role="button"]') || []);
+          for (const b of candidates) {
+            if (isExcluded(b)) continue;
+            const text = (b.textContent || "").trim();
+            if (
+              text === "Pro Mở rộng" ||
+              text === "Flash Mở rộng" ||
+              text === "3.8 Flash" ||
+              text === "3.1 Pro" ||
+              text === "3.5 Flash-Lite" ||
+              text.includes("Mở rộng")
+            ) {
+              return { found: true, text };
+            }
           }
         }
-        return "";
+
+        // Global search excluding sidebar
+        const allButtons = Array.from(document.querySelectorAll('button, [role="button"]'));
+        for (const b of allButtons) {
+          if (isExcluded(b)) continue;
+          const text = (b.textContent || "").trim();
+          const testId = (b.getAttribute("data-test-id") || "").toLowerCase();
+          const aria = (b.getAttribute("aria-label") || "").toLowerCase();
+
+          if (
+            text === "Pro Mở rộng" ||
+            text === "Flash Mở rộng" ||
+            text === "3.8 Flash" ||
+            text === "3.1 Pro" ||
+            text === "3.5 Flash-Lite" ||
+            (text.includes("Mở rộng") && (text.includes("Pro") || text.includes("Flash"))) ||
+            testId.includes("mode-menu") ||
+            aria.includes("chọn mô hình")
+          ) {
+            return { found: true, text };
+          }
+        }
+
+        return { found: false, text: "" };
       });
+
+      const currentText = buttonInfo.text;
 
       // Check if already on the target model
       if (targetKey === "3.8") {
@@ -974,25 +1008,30 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
         }
       }
 
-      // Step 2: Open the model selector menu
+      // Step 2: Open the model selector menu by clicking the real input bar button
       const opened = await page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
-        for (const b of buttons) {
+        const isExcluded = (el: Element) => {
+          return !!el.closest(
+            "nav, aside, mat-sidenav, .side-nav, .sidebar, [role='navigation'], [aria-label*='Tài khoản'], [aria-label*='Account']"
+          );
+        };
+
+        const allButtons = Array.from(document.querySelectorAll('button, [role="button"]'));
+        for (const b of allButtons) {
+          if (isExcluded(b)) continue;
           const text = (b.textContent || "").trim();
-          const aria = (b.getAttribute("aria-label") || "").toLowerCase();
           const testId = (b.getAttribute("data-test-id") || "").toLowerCase();
+          const aria = (b.getAttribute("aria-label") || "").toLowerCase();
+
           if (
+            text === "Pro Mở rộng" ||
+            text === "Flash Mở rộng" ||
+            text === "3.8 Flash" ||
+            text === "3.1 Pro" ||
+            text === "3.5 Flash-Lite" ||
+            (text.includes("Mở rộng") && (text.includes("Pro") || text.includes("Flash"))) ||
             testId.includes("mode-menu") ||
-            testId.includes("model") ||
-            aria.includes("mô hình") ||
-            aria.includes("model") ||
-            text.includes("Pro Mở rộng") ||
-            text.includes("Flash Mở rộng") ||
-            text.includes("3.8 Flash") ||
-            text.includes("3.1 Pro") ||
-            text.includes("3.5 Flash-Lite") ||
-            (b.getAttribute("aria-haspopup") === "menu" &&
-              (text.includes("Pro") || text.includes("Flash") || text.includes("Lite")))
+            aria.includes("chọn mô hình")
           ) {
             (b as HTMLElement).click();
             return true;
@@ -1004,72 +1043,87 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
       if (!opened) {
         const fallbackBtn = page
           .locator(
-            'button[data-test-id="bard-mode-menu-button"], button.input-area-switch, button:has-text("Pro Mở rộng"), button:has-text("Flash Mở rộng"), button:has-text("3.1 Pro"), button:has-text("3.8 Flash"), [aria-label*="chọn mô hình"], [aria-label*="model"]'
+            'button:has-text("Pro Mở rộng"), button:has-text("Flash Mở rộng"), button:has-text("3.1 Pro"), button:has-text("3.8 Flash"), [data-test-id*="mode-menu"]'
           )
           .first();
-        if (await fallbackBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+        if (await fallbackBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
           await fallbackBtn.click();
         }
       }
 
       await page.waitForTimeout(600);
 
-      // Step 3: Select the specific target model item from the open menu
+      // Step 3: Select the specific target model item from the open menu overlay
       const clicked = await page.evaluate((key) => {
-        const candidates = Array.from(
+        const overlays = Array.from(
           document.querySelectorAll(
-            '[role="menuitem"], [role="menuitemradio"], mat-list-item, div.mat-mdc-menu-item, [role="option"], .mat-mdc-menu-item, button'
+            '.cdk-overlay-container, [role="menu"], mat-menu-panel, .mat-mdc-menu-panel'
           )
         );
+        const searchScope = overlays.length > 0 ? overlays : [document];
 
-        for (const el of candidates) {
-          const text = (el.textContent || "").trim();
-          // Skip if this is the menu trigger button itself
-          if (el.getAttribute("aria-haspopup") === "menu") continue;
+        for (const scope of searchScope) {
+          const items = Array.from(
+            scope.querySelectorAll(
+              '[role="menuitem"], [role="menuitemradio"], mat-list-item, div.mat-mdc-menu-item, [role="option"], .mat-mdc-menu-item, button, div'
+            )
+          );
 
-          if (key === "3.8") {
-            // Target 3.8 Flash specifically: MUST contain 3.8, or Flash without Lite and without Mở rộng
-            if (
-              text.includes("3.8") ||
-              (text.includes("Flash") && !text.includes("Lite") && !text.includes("Mở rộng") && !text.includes("Pro"))
-            ) {
-              (el as HTMLElement).click();
-              return true;
-            }
-          } else if (key === "3.1") {
-            // Target 3.1 Pro specifically
-            if (
-              text.includes("3.1") ||
-              (text.includes("Pro") && !text.includes("Flash") && !text.includes("Mở rộng"))
-            ) {
-              (el as HTMLElement).click();
-              return true;
-            }
-          } else if (key === "3.5") {
-            // Target 3.5 Flash-Lite specifically
-            if (text.includes("3.5") || text.includes("Lite")) {
-              (el as HTMLElement).click();
-              return true;
+          for (const el of items) {
+            const text = (el.textContent || "").trim();
+            // Skip if this is the menu trigger button itself
+            if (el.getAttribute("aria-haspopup") === "menu") continue;
+
+            if (key === "3.8") {
+              // Target 3.8 Flash specifically: MUST contain 3.8 Flash or (3.8 and Flash)
+              if (
+                text.includes("3.8 Flash") ||
+                (text.includes("3.8") && text.includes("Flash")) ||
+                (text.includes("Flash") && !text.includes("Lite") && !text.includes("Mở rộng") && !text.includes("Pro"))
+              ) {
+                el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+                el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+                (el as HTMLElement).click();
+                return { success: true, clicked: text };
+              }
+            } else if (key === "3.1") {
+              if (
+                text.includes("3.1 Pro") ||
+                (text.includes("3.1") && text.includes("Pro")) ||
+                (text.includes("Pro") && !text.includes("Flash") && !text.includes("Mở rộng"))
+              ) {
+                el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+                el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+                (el as HTMLElement).click();
+                return { success: true, clicked: text };
+              }
+            } else if (key === "3.5") {
+              if (text.includes("3.5 Flash-Lite") || text.includes("Lite")) {
+                el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+                el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+                (el as HTMLElement).click();
+                return { success: true, clicked: text };
+              }
             }
           }
         }
-        return false;
+        return { success: false, clicked: "" };
       }, targetKey);
 
-      if (!clicked) {
+      if (!clicked?.success) {
         // Fallback with Playwright locators using version-specific filters
         const itemLocator = page
           .locator(
             targetKey === "3.8"
-              ? '[role="menuitem"]:has-text("3.8"), [role="menuitemradio"]:has-text("3.8"), button:has-text("3.8")'
+              ? '[role="menuitem"]:has-text("3.8 Flash"), [role="menuitemradio"]:has-text("3.8 Flash"), div:has-text("3.8 Flash"), button:has-text("3.8 Flash")'
               : targetKey === "3.1"
-              ? '[role="menuitem"]:has-text("3.1"), [role="menuitemradio"]:has-text("3.1"), button:has-text("3.1")'
-              : '[role="menuitem"]:has-text("Lite"), [role="menuitemradio"]:has-text("Lite"), button:has-text("Lite")'
+              ? '[role="menuitem"]:has-text("3.1 Pro"), [role="menuitemradio"]:has-text("3.1 Pro"), div:has-text("3.1 Pro"), button:has-text("3.1 Pro")'
+              : '[role="menuitem"]:has-text("3.5 Flash-Lite"), [role="menuitemradio"]:has-text("3.5 Flash-Lite"), div:has-text("3.5 Flash-Lite")'
           )
-          .first();
+          .last();
 
-        if (await itemLocator.isVisible({ timeout: 1000 }).catch(() => false)) {
-          await itemLocator.click();
+        if (await itemLocator.isVisible({ timeout: 1500 }).catch(() => false)) {
+          await itemLocator.click({ force: true });
         }
       }
 
