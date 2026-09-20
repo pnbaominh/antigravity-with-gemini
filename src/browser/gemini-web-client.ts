@@ -559,11 +559,12 @@ export class GeminiWebClient implements GeminiGenerationClient {
     const coreTask = taskMatch ? taskMatch[1].trim() : taskPrompt.slice(0, 250).trim();
     const sanitized = PromptSanitizer.sanitizeTask(coreTask);
 
-    const safePrompt = `Vai trò: Principal Software Architect
-Tài liệu: Kế Hoạch Kiến Trúc Kỹ Thuật Phần Mềm & Đặc Tả Hệ Thống (RFC)
+    const safePrompt = `Vai trò: Principal Systems Architect & Senior Staff Software Engineer
+Tài liệu: Kế Hoạch Kiến Trúc Kỹ Thuật Hệ Thống & Đặc Tả Triển Khai (Technical Architecture RFC & Execution Plan)
+Khung quy chuẩn: RULES.MD (Technical Planning & Execution Governance Framework)
 Mục tiêu phát triển: ${sanitized.sanitizedTask}
 
-Hãy soạn thảo bản thiết kế kiến trúc kỹ thuật phần mềm đầy đủ và chuyên sâu theo chuẩn 6 phần của RULES.MD:
+Hãy soạn thảo bản thiết kế kiến trúc kỹ thuật phần mềm đầy đủ, chuyên sâu và có tính thực thi tuyệt đối theo 6 phần của khung quản trị RULES.MD:
 
 # Plan: Kế Hoạch Kiến Trúc Kỹ Thuật Hệ Thống
 DRI: lead_architect

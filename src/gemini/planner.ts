@@ -65,52 +65,80 @@ export class GeminiPlanner {
       : "";
 
     const prompt = isVN
-      ? `Viết kế hoạch kiến trúc kỹ thuật hệ thống theo chuẩn RULES.MD cho nhiệm vụ sau: "${params.task}".
+      ? `Vai trò: Principal Systems Architect & Senior Staff Software Engineer
+Tài liệu: Bản Thiết Kế Kiến Trúc Kỹ Thuật & Kế Hoạch Triển Khai Phần Mềm (Technical Architecture RFC & Execution Plan)
+Khung quy chuẩn: RULES.MD (Technical Planning & Execution Governance Framework)
+
+Mục tiêu phát triển hệ thống:
+"${params.task}"
 ${greenfieldNote}
-${params.workspaceSummary ? `Thông tin Workspace:\n${params.workspaceSummary}\n` : ""}
+${params.workspaceSummary ? `Thông tin Workspace hiện tại:\n${params.workspaceSummary}\n` : ""}
 ${params.gitStatus ? `Trạng thái Git:\n${params.gitStatus}\n` : ""}
-${params.additionalContext ? `Ngữ cảnh bổ sung:\n${params.additionalContext}\n` : ""}
+${params.additionalContext ? `Ngữ cảnh kỹ thuật:\n${params.additionalContext}\n` : ""}
 
-Trình bày theo cấu trúc kỹ thuật tiêu chuẩn RULES.MD:
-# Plan: [Tên Kiến Trúc Kỹ Thuật]
-Người phụ trách chính: lead_architect
+Là một Kiến trúc sư trưởng, bạn phải lập một bản kế hoạch kiến trúc kỹ thuật hoàn chỉnh, chi tiết và có tính thực thi tuyệt đối cho AI Agent / Kỹ sư phần mềm. Kế hoạch PHẢI tuân thủ nghiêm ngặt 5 Tiên Đề Bất Biến của khung quản trị RULES.MD:
+1. Evidence-Based Grounding: Khảo sát thực tế hệ thống, lựa chọn Tech Stack tối ưu với lý lẽ kỹ thuật rõ ràng, sơ đồ luồng dữ liệu đa tầng (Mermaid flowchart TD), cấu trúc thư mục định danh tệp ([NEW], [MODIFY], [DELETE]), và các TypeScript Interfaces / Data Contracts đầy đủ.
+2. Scope Discipline (Non-Goals >= 3): Bắt buộc nêu rõ tối thiểu 3 mục dứt khoát NẰM NGOÀI PHẠM VI (Out-of-Scope) kèm lý do kỹ thuật để triệt tiêu phình phạm vi.
+3. Halt-on-Unknown Protocol: Xác định rõ trạng thái CLEAR hay HALT. Nếu thiếu thông số phần cứng/hệ điều hành chí mạng, phải chỉ rõ để kiểm chứng thực nghiệm trước.
+4. Quản trị rủi ro chủ động (Bảng RAID Log >= 4 mục): Phân tích Rủi ro kỹ thuật (Risks), Giả định (Assumptions), Phụ thuộc (Dependencies) với giải pháp phòng ngừa chủ động và phân quyền Single DRI.
+5. Phân rã WBS (Quy tắc 8/80) & Ước lượng PERT: Chia thành các Phase tuần tự, mỗi task có lệnh shell nhị phân (Verification Command) và ước tính 3 điểm PERT: E = (O + 4M + P) / 6.
+6. Cổng chất lượng nhị phân (Binary DoD): 100% test pass, 0 type errors, 0 lint warnings, clean build.
 
-## 1. AS-IS State & Hiện Trạng Hệ Thống
-- Mô tả hiện trạng dự án ban đầu, lựa chọn công nghệ Tech Stack (Runtime, Framework, UI, State, Testing).
+Trình bày tài liệu bắt đầu ngay lập tức theo định dạng Markdown tiêu chuẩn sau:
+
+# Plan: [Tên Kiến Trúc Kỹ Thuật Hệ Thống]
+DRI: lead_architect
+
+## 1. AS-IS State & System Architecture Blueprint
+- Hiện trạng hệ thống & Cơ sở lý luận lựa chọn Tech Stack (Runtime, Framework, UI, State, Security/Native APIs).
 - Sơ đồ kiến trúc & luồng dữ liệu (Mermaid flowchart TD).
-- Cấu trúc thư mục định danh file ([NEW], [MODIFY], [DELETE]).
-- Định nghĩa TypeScript interfaces & Data contracts.
+- Cấu trúc thư mục & phân tầng mã nguồn định danh tệp ([NEW], [MODIFY], [DELETE]).
+- Định nghĩa TypeScript interfaces & Data contracts cốt lõi.
 
 ## 2. Non-Goals & Phạm Vi Dự Án (Tối thiểu 3 mục ngoài phạm vi)
-1. ...
-2. ...
-3. ...
+1. [Mục 1 ngoài phạm vi & lý do kỹ thuật kiên quyết không làm trong chu kỳ này]
+2. [Mục 2 ngoài phạm vi & lý do kỹ thuật]
+3. [Mục 3 ngoài phạm vi & lý do kỹ thuật]
 
-## 3. Unknowns & Kiểm Tra Kỹ Thuật
-Status: CLEAR
+## 3. Unknowns & Kiểm Tra Kỹ Thuật (Halt-on-Unknown)
+- Status: CLEAR (hoặc HALT nếu có ẩn số kỹ thuật chí mạng)
+- Unknowns: None (hoặc danh sách các điểm cần làm rõ)
 
 ## 4. Quản Trị Rủi Ro & Bảng RAID Log (Tối thiểu 4 mục)
-Bảng phân tích rủi ro kỹ thuật, giả định, phụ thuộc và biện pháp khắc phục:
 | ID | Category | Description | Impact | Likelihood | Mitigation Strategy | Owner DRI |
 | R-1 | Risk | Concurrency & Async state hazards | High | Medium | Defensive locks / debounce | lead_architect |
-| R-2 | Risk | Platform quirks (Windows vs POSIX paths, CRLF) | Medium | High | Path normalization & npm.cmd | lead_architect |
-| R-3 | Risk | Network timeouts & API error boundaries | High | Low | Exponential backoff & retry | lead_architect |
-| A-1 | Assumption | Browser runtime compatibility | Medium | Low | Runtime validation checks | lead_architect |
+| R-2 | Risk | Platform quirks (Windows vs POSIX paths, CRLF, Admin UAC) | Medium | High | Path normalization & execution checks | lead_architect |
+| R-3 | Risk | Network / OS API timeouts & error boundaries | High | Low | Exponential backoff & graceful fail-safe | lead_architect |
+| A-1 | Assumption | Host environment & OS version compatibility | Medium | Low | Runtime prerequisite verification | lead_architect |
 
-## 5. Work Breakdown Structure (WBS) & Phân Chia Giai Đoạn
-Chia thành Phase 1 (Khởi tạo & Scaffolding), Phase 2 (Giao diện & Chức năng chính), Phase 3 (Tối ưu & Triển khai). Mỗi phase có danh sách task checklist ([NEW], [MODIFY]), single DRI (DRI: lead_architect), lệnh kiểm thử verification shell nhị phân và ước tính thời gian PERT (PERT: O=..., M=..., P=...).
+## 5. Work Breakdown Structure (WBS) & Phân Chia Giai Đoạn (PERT)
+Chia thành các Phase cụ thể (Phase 1: Khởi tạo Scaffolding & Types, Phase 2: Domain Logic & Security/Core Engines, Phase 3: GUI & User Interactions, Phase 4: Production Build & Hardening).
+Mỗi task có nhãn file ([NEW], [MODIFY]), single DRI (DRI: lead_architect), lệnh kiểm thử shell nhị phân (Verification Command) và ước tính PERT (PERT: O=...h, M=...h, P=...h, E=...h).
 
 ## 6. Definition of Done & Tiêu Chuẩn Nghiệm Thu
-Tiêu chí nghiệm thu: 100% test pass, 0 type errors, 0 lint warnings, clean build.
+Tiêu chuẩn pass/fail nhị phân: 100% test pass, 0 type errors, 0 lint warnings, clean build.
 
-Yêu cầu xuất: Bắt đầu trực tiếp với "# Plan: [Tiêu đề]", không xuất lời chào hay văn bản giao tiếp.`
-      : `Write a technical architecture implementation plan adhering to RULES.MD for the following task: "${params.task}".
+Yêu cầu xuất: Bắt đầu trực tiếp với "# Plan: [Tiêu đề]", không xuất lời chào hay văn bản giao tiếp thừa thãi.`
+      : `Role: Principal Systems Architect & Senior Staff Software Engineer
+Document: Technical Architecture RFC & Phased Implementation Plan
+Governance Standard: RULES.MD (Technical Planning & Execution Governance Framework)
+
+System Development Objective:
+"${params.task}"
 ${greenfieldNote}
 ${params.workspaceSummary ? `Workspace Info:\n${params.workspaceSummary}\n` : ""}
 ${params.gitStatus ? `Git Status:\n${params.gitStatus}\n` : ""}
 ${params.additionalContext ? `Context:\n${params.additionalContext}\n` : ""}
 
-Follow this standard technical RULES.MD blueprint:
+As Lead Architect, formulate an authoritative, highly detailed technical implementation plan with 100% execution precision for AI coding agents and engineers. The plan MUST strictly adhere to the 5 Fundamental Axioms of the RULES.MD governance framework:
+1. Evidence-Based Grounding: Thorough AS-IS assessment, rigorous tech stack selection with technical rationale, multi-tier data flow diagram (Mermaid flowchart TD), directory layout with explicit file tags ([NEW], [MODIFY], [DELETE]), and typed interface contracts.
+2. Scope Discipline (Non-Goals >= 3): Explicitly enumerate at least 3 directly related items decisively OUT OF SCOPE to prevent scope creep.
+3. Halt-on-Unknown Protocol: Declare Status: CLEAR or HALT. If critical technical parameters are missing, halt and list required empirical tests.
+4. Active Risk Governance (RAID Log >= 4 entries): Systemic table analyzing Risks (concurrency, platform quirks, timeouts), Assumptions, Dependencies with proactive mitigations and Single DRI.
+5. Phased WBS (8/80 Rule) & PERT Estimation: Decompose into sequenced phases, each task with runnable shell verification command and 3-point PERT estimate: E = (O + 4M + P) / 6.
+6. Binary Quality Gates (DoD): 100% test pass, 0 type errors, 0 lint warnings, clean build.
+
+Follow this standard technical blueprint:
 # Plan: [Concise Architecture Title]
 DRI: lead_architect
 
@@ -127,6 +155,7 @@ DRI: lead_architect
 
 ## 3. Unknowns & Halt Checks
 Status: CLEAR
+Unknowns: None
 
 ## 4. Risk Assessment & RAID Log (Mandatory >= 4 entries)
 | ID | Category | Description | Impact | Likelihood | Mitigation Strategy | Owner DRI |
