@@ -77,6 +77,124 @@ export class GeminiPlanner {
     this.client = client;
   }
 
+  /**
+   * Performs deep pre-planning technical reconnaissance and workspace investigation.
+   * Explores package descriptors, configuration files, directory hierarchy, git status,
+   * and identifies technical constraints and invariants before plan formulation.
+   */
+  public investigatePrerequisites(workspaceRoot?: string, task?: string): string {
+    const root = workspaceRoot ? path.resolve(workspaceRoot) : process.cwd();
+    const findings: string[] = [];
+
+    // 1. Inspect package.json
+    const pkgPath = path.join(root, "package.json");
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+        const deps = Object.keys(pkg.dependencies || {});
+        const devDeps = Object.keys(pkg.devDependencies || {});
+        const scripts = Object.keys(pkg.scripts || {});
+        findings.push(
+          `- Dự án / Ứng dụng: ${pkg.name || path.basename(root)} (v${pkg.version || "0.1.0"}, type: ${pkg.type || "commonjs"})`
+        );
+        if (deps.length > 0) {
+          findings.push(
+            `- Dependencies cốt lõi (${deps.length}): ${deps.slice(0, 15).join(", ")}${deps.length > 15 ? "..." : ""}`
+          );
+        }
+        if (devDeps.length > 0) {
+          findings.push(
+            `- DevDependencies (${devDeps.length}): ${devDeps.slice(0, 15).join(", ")}${devDeps.length > 15 ? "..." : ""}`
+          );
+        }
+        if (scripts.length > 0) {
+          findings.push(`- NPM Scripts sẵn có: ${scripts.join(", ")}`);
+        }
+      } catch {}
+    }
+
+    // 2. Inspect key configuration files
+    const configCandidates = [
+      "tsconfig.json",
+      "vite.config.ts",
+      "vite.config.js",
+      "next.config.js",
+      "next.config.mjs",
+      "tailwind.config.js",
+      "tailwind.config.ts",
+      "docker-compose.yml",
+      "Dockerfile",
+      ".env.example",
+      "Cargo.toml",
+      "go.mod",
+    ];
+    const detectedConfigs = configCandidates.filter((c) => fs.existsSync(path.join(root, c)));
+    if (detectedConfigs.length > 0) {
+      findings.push(`- Tệp cấu hình hệ thống phát hiện: ${detectedConfigs.join(", ")}`);
+    }
+
+    // 3. Inspect top-level directory layout
+    try {
+      const entries = fs.readdirSync(root, { withFileTypes: true });
+      const dirs = entries
+        .filter(
+          (e) =>
+            e.isDirectory() &&
+            !e.name.startsWith(".") &&
+            e.name !== "node_modules" &&
+            e.name !== "dist"
+        )
+        .map((e) => `${e.name}/`);
+      if (dirs.length > 0) {
+        findings.push(`- Cấu trúc thư mục nguồn hiện có: ${dirs.join(", ")}`);
+      }
+    } catch {}
+
+    // 4. Domain-specific technical analysis based on task
+    if (task) {
+      const lowerTask = task.toLowerCase();
+      const requirements: string[] = [];
+      if (
+        lowerTask.includes("api") ||
+        lowerTask.includes("rest") ||
+        lowerTask.includes("backend") ||
+        lowerTask.includes("server")
+      ) {
+        requirements.push("Kiến trúc API endpoints, xác thực request/response payload, xử lý timeout & rate limit");
+      }
+      if (
+        lowerTask.includes("ui") ||
+        lowerTask.includes("web") ||
+        lowerTask.includes("giao diện") ||
+        lowerTask.includes("frontend") ||
+        lowerTask.includes("component")
+      ) {
+        requirements.push("Quản lý UI state, component hierarchy, responsive layout, CSS tokenization & a11y");
+      }
+      if (
+        lowerTask.includes("db") ||
+        lowerTask.includes("database") ||
+        lowerTask.includes("dữ liệu") ||
+        lowerTask.includes("sql") ||
+        lowerTask.includes("cache")
+      ) {
+        requirements.push("Hợp đồng dữ liệu (data contracts), phân tầng cache, tính toàn vẹn dữ liệu và idempotency");
+      }
+      if (lowerTask.includes("test") || lowerTask.includes("kiểm thử")) {
+        requirements.push("Tự động hóa kiểm thử đơn vị & tích hợp nhị phân, mock isolation");
+      }
+      requirements.push("Chuẩn hóa đường dẫn tương thích đa nền tảng (Windows CRLF/npm.cmd vs POSIX)");
+
+      findings.push(`- Phân tích trọng tâm kỹ thuật & Ràng buộc bất biến: ${requirements.join("; ")}`);
+    }
+
+    if (findings.length === 0) {
+      return "";
+    }
+
+    return `\n================================================================================\nKẾT QUẢ KHẢO SÁT CHUYÊN SÂU TIỀN KHẢ THI (PRE-PLANNING RECONNAISSANCE DOSSIER):\n--------------------------------------------------------------------------------\n${findings.join("\n")}\n================================================================================\n`;
+  }
+
   async createPlan(params: {
     task: string;
     workspaceSummary: string;
@@ -110,8 +228,11 @@ export class GeminiPlanner {
         : `\n================================================================================\nTECHNICAL GOVERNANCE STANDARD: RULES.MD (FULL MANDATORY SPECIFICATION TEXT):\n--------------------------------------------------------------------------------\n${rulesDoc}\n================================================================================\n`
       : "";
 
+    const deepInvestigation = this.investigatePrerequisites(params.workspaceRoot, params.task);
+
     const prompt = isVN
       ? `${rulesSection}
+${deepInvestigation}
 Vai trò: Principal Systems Architect & Senior Staff Software Engineer
 Tài liệu: Bản Thiết Kế Kiến Trúc Kỹ Thuật Hệ Thống & Kế Hoạch Triển Khai Thực Thi (Technical Architecture RFC & Phased Execution Plan)
 Quy chuẩn áp dụng: RULES.MD (đã được đính kèm toàn văn ở trên)
@@ -175,6 +296,7 @@ YÊU CẦU ĐỊNH DẠNG:
 - Bắt đầu trực tiếp bằng "# Plan: [Tiêu đề]", TUYỆT ĐỐI không xuất bất kỳ lời chào hay câu mở đầu nào.
 - Xuất đầy đủ toàn văn, không cắt bớt, không dùng "..." hay placeholder.`
       : `${rulesSection}
+${deepInvestigation}
 Role: Principal Systems Architect & Senior Staff Software Engineer
 Document: Technical Architecture RFC & Phased Implementation Plan
 Governance Standard: RULES.MD (Full specification provided above)
@@ -224,11 +346,12 @@ Output Requirement: Directly begin your response with "# Plan: [Title]". Do not 
 
     const systemInstruction = `Role: Principal Software Architect. Purpose: "Gemini Thinks. Antigravity Works." Operating under RULES.MD technical governance. Output pure technical Markdown plan starting with "# Plan:".`;
 
-    // 1. Generate initial draft plan
+    // 1. Generate initial draft plan (Turn 1: starts fresh chat session)
     const draftResponse = await this.client.generate(prompt, {
       systemInstruction,
       thinkingBudget: 4096,
       model: params.model,
+      continueConversation: false,
     });
 
     const draftMarkdown = draftResponse.text;
@@ -363,6 +486,7 @@ Audit this plan with high engineering standards. If the plan is shallow, lacks c
       const reviewResponse = await this.client.generate(auditPrompt, {
         systemInstruction: auditorInstruction,
         thinkingBudget: 2048,
+        continueConversation: true,
       });
 
       const raw = reviewResponse.text;
@@ -442,8 +566,32 @@ Audit this plan with high engineering standards. If the plan is shallow, lacks c
     model?: string;
   }): Promise<string> {
     const { sanitizedTask } = PromptSanitizer.sanitizeTask(params.task);
+    const isVN =
+      /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(params.task);
 
-    const refinePrompt = `Task requested by user (Authorized Scope):
+    const issuesText =
+      params.audit.identifiedIssues.length > 0
+        ? params.audit.identifiedIssues.map((v) => `- ${v}`).join("\n")
+        : "- Cần hoàn thiện và chuẩn hóa đầy đủ 6 phần theo quy chuẩn RULES.MD";
+
+    const refinePrompt = isVN
+      ? `[YÊU CẦU ĐIỀU CHỈNH & HOÀN THIỆN PLAN - TIẾP TỤC TRONG CÙNG ĐOẠN CHAT]
+Dựa trên bản thiết kế kiến trúc bạn vừa trình bày ở trên, qua quá trình thẩm định kỹ thuật phát hiện các điểm cần khắc phục và bổ sung như sau:
+${issuesText}
+
+YÊU CẦU HOÀN THIỆN (IN-THREAD REFINEMENT):
+Giữ nguyên toàn bộ bối cảnh, trường suy nghĩ và các phân tích kỹ thuật đã thảo luận ở trên, hãy cập nhật, bổ sung hoàn chỉnh và xuất lại toàn bộ bản Plan kỹ thuật theo đúng quy chuẩn RULES.MD từ đầu đến cuối:
+- Bắt đầu trực tiếp bằng "# Plan: [Tên Kiến Trúc Kỹ Thuật]"
+- Khắc phục triệt để toàn bộ các điểm chưa đạt ở trên
+- Đảm bảo đầy đủ 6 phần bắt buộc:
+  1. AS-IS State & System Architecture Blueprint (kèm sơ đồ Mermaid flowchart TD và đầy đủ TypeScript Interfaces)
+  2. Non-Goals & Phạm Vi Dự Án (tối thiểu 3 mục ngoài phạm vi dứt khoát kèm lý do kỹ thuật)
+  3. Unknowns & Kiểm Tra Kỹ Thuật (Status: CLEAR)
+  4. Quản Trị Rủi Ro & Bảng RAID Log (tối thiểu 4 mục phân tích sâu)
+  5. Work Breakdown Structure (WBS) & Phân Chia Giai Đoạn (mỗi phase có Single DRI, shell verification command, ước lượng PERT)
+  6. Definition of Done & Tiêu Chuẩn Nghiệm Thu (tiêu chí nhị phân: 100% test pass, 0 type errors, clean build)
+- Tuyệt đối không xuất bất kỳ lời chào hay văn bản giao tiếp nào.`
+      : `Task requested by user (Authorized Scope):
 ${sanitizedTask}
 
 Workspace Info:
@@ -455,8 +603,8 @@ ${params.draftMarkdown}
 The Lead Staff Architect Auditor evaluated the draft with a score of ${params.audit.score}/100 and provided the following critique and required improvements:
 ${params.audit.rawReviewMarkdown}
 
-INSTRUCTIONS FOR SELF-CORRECTION:
-1. Directly address and fix every identified issue and required refinement from the auditor.
+INSTRUCTIONS FOR SELF-CORRECTION (CONTINUE IN CURRENT CHAT THREAD):
+1. Directly address and fix every identified issue and required refinement from the auditor while maintaining full context and continuity.
 2. Ensure every file operation has explicit tags ([NEW], [MODIFY], [DELETE], [TEST]).
 3. Ensure every single Phase has a concrete, runnable shell verification command.
 4. Reinforce all traps (Windows path/CRLF quirks, race conditions, error boundaries).
@@ -467,6 +615,7 @@ Format requirement: Directly begin your output with "# Plan: [Title]". Output pu
         systemInstruction: params.systemInstruction,
         thinkingBudget: 4096,
         model: params.model,
+        continueConversation: true,
       });
 
       const refinedText = refinedResponse.text?.trim();

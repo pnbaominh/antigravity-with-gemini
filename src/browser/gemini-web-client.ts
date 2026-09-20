@@ -319,49 +319,65 @@ export class GeminiWebClient implements GeminiGenerationClient {
       thinkingBudget?: number;
       temperature?: number;
       model?: string;
+      continueConversation?: boolean;
     }
   ): Promise<{ text: string; model: string }> {
     const page = await this.getPage(this.config.headless === false);
 
-    // Ensure we start in a fresh conversation on Gemini Web to prevent context pollution
-    if (!page.url().includes("gemini.google.com")) {
-      await page.goto("https://gemini.google.com/app", {
-        waitUntil: "domcontentloaded",
-        timeout: 45_000,
-      });
-      await page.waitForTimeout(2000);
+    const isContinuing = options?.continueConversation === true;
+
+    if (!isContinuing) {
+      // Ensure we start in a fresh conversation on Gemini Web to prevent context pollution
+      if (!page.url().includes("gemini.google.com")) {
+        await page.goto("https://gemini.google.com/app", {
+          waitUntil: "domcontentloaded",
+          timeout: 45_000,
+        });
+        await page.waitForTimeout(2000);
+      } else {
+        // If already on Gemini Web, reset to a fresh chat for a brand new conversation
+        try {
+          const newChatBtn = page
+            .locator(
+              'button:has-text("Cuộc trò chuyện mới"), button:has-text("New chat"), a:has-text("Cuộc trò chuyện mới"), a:has-text("New chat"), [aria-label*="Cuộc trò chuyện mới"], [aria-label*="New chat"]'
+            )
+            .first();
+          if (await newChatBtn.isVisible()) {
+            await newChatBtn.click();
+            await page.waitForTimeout(1500);
+          }
+        } catch {}
+      }
+
+      await this.handleCaptchaAndPopups(page);
+
+      // Check login
+      const isLoggedIn = await this.isUserAuthenticated();
+      if (!isLoggedIn) {
+        throw new Error(
+          "Google Gemini Web is not logged in. Please run `g2a login-web` in terminal to log in to your Google Account first."
+        );
+      }
+
+      // Ensure target model (prioritize 3.8 Flash > 3.1 Pro > 3.5 Flash-Lite) is selected
+      const activeModel =
+        options?.model ||
+        this.config.preferredModel ||
+        process.env.GEMINI_MODEL ||
+        "3.8 Flash";
+      await this.ensureBestModel(page, activeModel);
     } else {
-      // If already on Gemini Web, reset to a fresh chat
-      try {
-        const newChatBtn = page
-          .locator(
-            'button:has-text("Cuộc trò chuyện mới"), button:has-text("New chat"), a:has-text("Cuộc trò chuyện mới"), a:has-text("New chat"), [aria-label*="Cuộc trò chuyện mới"], [aria-label*="New chat"]'
-          )
-          .first();
-        if (await newChatBtn.isVisible()) {
-          await newChatBtn.click();
-          await page.waitForTimeout(1500);
-        }
-      } catch {}
+      // Continuing conversation in the EXACT SAME CHAT THREAD:
+      // Absolutely NO clicking "Cuộc trò chuyện mới" / "New chat", NO navigation, NO page reload!
+      // This preserves Gemini's entire context window, thinking field, and reasoning chain.
+      await this.handleCaptchaAndPopups(page);
     }
 
-    await this.handleCaptchaAndPopups(page);
-
-    // Check login
-    const isLoggedIn = await this.isUserAuthenticated();
-    if (!isLoggedIn) {
-      throw new Error(
-        "Google Gemini Web is not logged in. Please run `g2a login-web` in terminal to log in to your Google Account first."
-      );
-    }
-
-    // Ensure target model (prioritize 3.8 Flash > 3.1 Pro > 3.5 Flash-Lite) is selected
     const activeModel =
       options?.model ||
       this.config.preferredModel ||
       process.env.GEMINI_MODEL ||
       "3.8 Flash";
-    await this.ensureBestModel(page, activeModel);
 
     // Clean, natural prompt incorporating system instruction if provided
     let fullPrompt = prompt;
@@ -382,6 +398,21 @@ export class GeminiWebClient implements GeminiGenerationClient {
       (extracted.length < 150 && !extracted.includes("Plan:"));
 
     if (isError) {
+      if (isContinuing) {
+        // When continuing conversation, try in-chat re-prompting first instead of blowing away the chat
+        console.warn(
+          `[GeminiWeb Client] Response in existing thread was truncated or flagged ("${(extracted || "").slice(0, 50)}..."). Re-prompting in current thread...`
+        );
+        const retryPrompt = `Vui lòng tập trung hoàn thiện và xuất lại đầy đủ toàn văn bản Kế Hoạch Kiến Trúc Kỹ Thuật (bắt đầu bằng "# Plan:"):`;
+        const retryExtracted = await this.submitAndExtract(page, retryPrompt);
+        if (retryExtracted && !this.isBackendError(retryExtracted) && retryExtracted.length > 200) {
+          return {
+            text: retryExtracted,
+            model: activeModel,
+          };
+        }
+      }
+
       return await this.executeAutonomousBypass(
         page,
         prompt,

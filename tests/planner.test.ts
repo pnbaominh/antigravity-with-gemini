@@ -287,6 +287,63 @@ Implement hardened Redis caching with DistributedLock to prevent stampede.
     expect(capturedPrompt).toContain("BỘ QUY CHUẨN QUẢN TRỊ KỸ THUẬT: RULES.MD");
     expect(capturedPrompt).toContain("FUNDAMENTAL AXIOMS");
   });
+
+  it("should perform deep pre-planning technical investigation and inject dossier into prompt", async () => {
+    const dummyClient = {} as GeminiThinkingClient;
+    const planner = new GeminiPlanner(dummyClient);
+
+    const dossier = planner.investigatePrerequisites(process.cwd(), "Xây dựng hệ thống REST API và quản lý giao diện UI");
+    expect(dossier).toContain("PRE-PLANNING RECONNAISSANCE DOSSIER");
+    expect(dossier).toContain("Dự án / Ứng dụng: antigravity-with-gemini");
+    expect(dossier).toContain("Kiến trúc API endpoints");
+    expect(dossier).toContain("Quản lý UI state");
+
+    let capturedPrompt = "";
+    const mockClient = {
+      generate: vi.fn().mockImplementation(async (prompt: string) => {
+        capturedPrompt = prompt;
+        return { text: sampleArchitectPlan, model: "3.8-flash" };
+      }),
+    } as unknown as GeminiThinkingClient;
+
+    const testPlanner = new GeminiPlanner(mockClient);
+    await testPlanner.createPlan({
+      task: "Xây dựng REST API",
+      workspaceSummary: "Project: antigravity-with-gemini",
+      workspaceRoot: process.cwd(),
+      skipReview: true,
+    });
+
+    expect(capturedPrompt).toContain("PRE-PLANNING RECONNAISSANCE DOSSIER");
+    expect(capturedPrompt).toContain("Dự án / Ứng dụng: antigravity-with-gemini");
+  });
+
+  it("should maintain single-chat conversation continuity (continueConversation: true) during plan refinement", async () => {
+    const capturedOptions: any[] = [];
+    const mockClient = {
+      generate: vi.fn().mockImplementation(async (_prompt: string, options?: any) => {
+        capturedOptions.push(options);
+        if (capturedOptions.length === 1) {
+          // Incomplete draft triggering refinement
+          return { text: "Short incomplete draft", model: "3.8-flash" };
+        } else {
+          return { text: sampleArchitectPlan, model: "3.8-flash" };
+        }
+      }),
+    } as unknown as GeminiThinkingClient;
+
+    const planner = new GeminiPlanner(mockClient);
+    await planner.createPlan({
+      task: "Build caching system",
+      workspaceSummary: "Project: test",
+    });
+
+    // 1st call (Draft): continueConversation MUST be false (start chat thread)
+    expect(capturedOptions[0].continueConversation).toBe(false);
+
+    // Refinement call: continueConversation MUST be true (keep exact same chat thread!)
+    expect(capturedOptions[capturedOptions.length - 1].continueConversation).toBe(true);
+  });
 });
 
 

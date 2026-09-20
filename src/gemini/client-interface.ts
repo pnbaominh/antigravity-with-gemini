@@ -3,6 +3,7 @@ export interface GenerateOptions {
   systemInstruction?: string;
   thinkingBudget?: number;
   temperature?: number;
+  continueConversation?: boolean;
 }
 
 export interface GenerateResult {
