@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import path from "node:path";
 import { WorkspaceManager } from "../workspace/manager.js";
 import { getGitStatus, getGitDiff } from "../workspace/git.js";
 import { searchWorkspace } from "../workspace/search.js";
@@ -17,16 +18,26 @@ export function createG2AMcpServer(
     version: "1.0.0",
   });
 
-  const workspace = new WorkspaceManager(workspaceRoot);
+  const defaultWorkspace = new WorkspaceManager(workspaceRoot);
+  const getWorkspace = (customPath?: string) => {
+    const root = customPath ? path.resolve(customPath) : workspaceRoot;
+    return {
+      root,
+      manager: customPath ? new WorkspaceManager(root) : defaultWorkspace,
+    };
+  };
 
   // 1. workspace_info
   server.tool(
     "workspace_info",
     "Get high-level information about the current workspace (root path, git branch, package manager, detected frameworks).",
-    {},
-    async () => {
+    {
+      workspacePath: z.string().optional().describe("Target workspace root directory. If omitted, uses current workspace."),
+    },
+    async ({ workspacePath }: { workspacePath?: string } = {}) => {
       try {
-        const info = workspace.getInfo();
+        const ws = getWorkspace(workspacePath);
+        const info = ws.manager.getInfo();
         return {
           content: [
             {
@@ -51,10 +62,12 @@ export function createG2AMcpServer(
     {
       subDir: z.string().optional().default("").describe("Subdirectory relative to workspace root"),
       maxDepth: z.number().optional().default(3).describe("Maximum directory depth (default: 3)"),
+      workspacePath: z.string().optional().describe("Target workspace root directory. If omitted, uses current workspace."),
     },
-    async ({ subDir, maxDepth }: { subDir?: string; maxDepth?: number }) => {
+    async ({ subDir, maxDepth, workspacePath }: { subDir?: string; maxDepth?: number; workspacePath?: string }) => {
       try {
-        const items = workspace.listDirectory(subDir, maxDepth);
+        const ws = getWorkspace(workspacePath);
+        const items = ws.manager.listDirectory(subDir, maxDepth);
         return {
           content: [
             {
@@ -80,10 +93,12 @@ export function createG2AMcpServer(
       filePath: z.string().describe("Relative path to file within workspace"),
       startLine: z.number().optional().default(1).describe("First line to read (1-indexed)"),
       endLine: z.number().optional().describe("Last line to read (inclusive)"),
+      workspacePath: z.string().optional().describe("Target workspace root directory. If omitted, uses current workspace."),
     },
-    async ({ filePath, startLine, endLine }: { filePath: string; startLine?: number; endLine?: number }) => {
+    async ({ filePath, startLine, endLine, workspacePath }: { filePath: string; startLine?: number; endLine?: number; workspacePath?: string }) => {
       try {
-        const result = workspace.readFile(filePath, startLine, endLine);
+        const ws = getWorkspace(workspacePath);
+        const result = ws.manager.readFile(filePath, startLine, endLine);
         return {
           content: [
             {
@@ -110,20 +125,24 @@ export function createG2AMcpServer(
       isRegex: z.boolean().optional().default(false).describe("Whether query is a regular expression"),
       caseSensitive: z.boolean().optional().default(false).describe("Case-sensitive match"),
       maxResults: z.number().optional().default(50).describe("Maximum number of results to return"),
+      workspacePath: z.string().optional().describe("Target workspace root directory. If omitted, uses current workspace."),
     },
     async ({
       query,
       isRegex,
       caseSensitive,
       maxResults,
+      workspacePath,
     }: {
       query: string;
       isRegex?: boolean;
       caseSensitive?: boolean;
       maxResults?: number;
+      workspacePath?: string;
     }) => {
       try {
-        const results = searchWorkspace(workspaceRoot, query, {
+        const ws = getWorkspace(workspacePath);
+        const results = searchWorkspace(ws.root, query, {
           isRegex,
           caseSensitive,
           maxResults,
@@ -149,10 +168,13 @@ export function createG2AMcpServer(
   server.tool(
     "git_status",
     "Get current git status for the workspace (branch, staged, unstaged, untracked changes).",
-    {},
-    async () => {
+    {
+      workspacePath: z.string().optional().describe("Target workspace root directory. If omitted, uses current workspace."),
+    },
+    async ({ workspacePath }: { workspacePath?: string } = {}) => {
       try {
-        const status = getGitStatus(workspaceRoot);
+        const ws = getWorkspace(workspacePath);
+        const status = getGitStatus(ws.root);
         return {
           content: [
             {
@@ -177,10 +199,12 @@ export function createG2AMcpServer(
     {
       staged: z.boolean().optional().default(false).describe("View staged diff only"),
       file: z.string().optional().describe("View diff for a specific file"),
+      workspacePath: z.string().optional().describe("Target workspace root directory. If omitted, uses current workspace."),
     },
-    async ({ staged, file }: { staged?: boolean; file?: string }) => {
+    async ({ staged, file, workspacePath }: { staged?: boolean; file?: string; workspacePath?: string }) => {
       try {
-        const diff = getGitDiff(workspaceRoot, { staged, file });
+        const ws = getWorkspace(workspacePath);
+        const diff = getGitDiff(ws.root, { staged, file });
         return {
           content: [
             {
@@ -202,10 +226,13 @@ export function createG2AMcpServer(
   server.tool(
     "test_status",
     "Get test execution results and output from the most recent test run.",
-    {},
-    async () => {
+    {
+      workspacePath: z.string().optional().describe("Target workspace root directory. If omitted, uses current workspace."),
+    },
+    async ({ workspacePath }: { workspacePath?: string } = {}) => {
       try {
-        const status = getTestStatus(workspaceRoot);
+        const ws = getWorkspace(workspacePath);
+        const status = getTestStatus(ws.root);
         return {
           content: [{ type: "text", text: status }],
         };
@@ -222,10 +249,13 @@ export function createG2AMcpServer(
   server.tool(
     "execution_summary",
     "Get an overview summary of Antigravity's current/recent execution session.",
-    {},
-    async () => {
+    {
+      workspacePath: z.string().optional().describe("Target workspace root directory. If omitted, uses current workspace."),
+    },
+    async ({ workspacePath }: { workspacePath?: string } = {}) => {
       try {
-        const summary = getExecutionSummary(workspaceRoot);
+        const ws = getWorkspace(workspacePath);
+        const summary = getExecutionSummary(ws.root);
         return {
           content: [{ type: "text", text: summary }],
         };
@@ -244,10 +274,12 @@ export function createG2AMcpServer(
     "Inspect the detailed stdout/stderr and exit codes from commands executed by Antigravity.",
     {
       commandIndex: z.number().optional().describe("Index of the command to inspect"),
+      workspacePath: z.string().optional().describe("Target workspace root directory. If omitted, uses current workspace."),
     },
-    async ({ commandIndex }: { commandIndex?: number }) => {
+    async ({ commandIndex, workspacePath }: { commandIndex?: number; workspacePath?: string }) => {
       try {
-        const output = getExecutionOutput(workspaceRoot, commandIndex);
+        const ws = getWorkspace(workspacePath);
+        const output = getExecutionOutput(ws.root, commandIndex);
         return {
           content: [{ type: "text", text: output }],
         };

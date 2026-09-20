@@ -1,4 +1,5 @@
 import { z } from "zod";
+import path from "node:path";
 import type { GeminiGenerationClient } from "../gemini/client-interface.js";
 import { GeminiPlanner } from "../gemini/planner.js";
 import { GeminiReviewer } from "../gemini/reviewer.js";
@@ -25,6 +26,10 @@ export function registerThinkingTools(
     "Request Gemini Deep Thinking to analyze a task and generate a structured, phased implementation plan. By default, returns a zero-token pointer ticket (<50 tokens) to protect Antigravity's context limit.",
     {
       task: z.string().describe("The user task or feature description to plan for"),
+      workspacePath: z
+        .string()
+        .optional()
+        .describe("Target workspace root directory. If omitted, uses current workspace."),
       additionalContext: z
         .string()
         .optional()
@@ -44,20 +49,26 @@ export function registerThinkingTools(
     },
     async ({
       task,
+      workspacePath,
       additionalContext,
       returnMode,
       compact,
       model,
     }: {
       task: string;
+      workspacePath?: string;
       additionalContext?: string;
       returnMode?: "pointer" | "compact" | "full";
       compact?: boolean;
       model?: string;
     }) => {
       try {
-        const info = workspaceManager.getInfo();
-        const gitStatus = getGitStatus(workspaceRoot);
+        const targetRoot = workspacePath ? path.resolve(workspacePath) : workspaceRoot;
+        const targetWorkspace = workspacePath ? new WorkspaceManager(targetRoot) : workspaceManager;
+        const targetHistory = workspacePath ? new PlanHistoryStore(targetRoot) : historyStore;
+
+        const info = targetWorkspace.getInfo();
+        const gitStatus = getGitStatus(targetRoot);
         const workspaceSummary = `Project: ${info.name}, Branch: ${info.branch || "unknown"}, Package Manager: ${info.packageManager}, Frameworks: ${info.frameworks.join(", ") || "none"}`;
 
         const plan = await planner.createPlan({
@@ -65,11 +76,11 @@ export function registerThinkingTools(
           workspaceSummary,
           gitStatus: gitStatus.summary,
           additionalContext,
-          workspaceRoot,
+          workspaceRoot: targetRoot,
           model,
         });
 
-        const stored = historyStore.savePlan({
+        const stored = targetHistory.savePlan({
           task,
           source: "mcp",
           model: DEFAULT_GEMINI_MODELS.THINKING,
@@ -138,10 +149,15 @@ export function registerThinkingTools(
     {
       phaseIndex: z.number().int().min(1).describe("The 1-based index of the phase to retrieve (e.g. 1, 2, 3)"),
       planId: z.string().optional().describe("Optional specific plan ID. If omitted, uses the active plan."),
+      workspacePath: z
+        .string()
+        .optional()
+        .describe("Target workspace root directory. If omitted, uses current workspace."),
     },
-    async ({ phaseIndex, planId }: { phaseIndex: number; planId?: string }) => {
+    async ({ phaseIndex, planId, workspacePath }: { phaseIndex: number; planId?: string; workspacePath?: string }) => {
       try {
-        const plan = planId ? historyStore.getPlanById(planId) : historyStore.getActivePlan();
+        const targetHistory = workspacePath ? new PlanHistoryStore(path.resolve(workspacePath)) : historyStore;
+        const plan = planId ? targetHistory.getPlanById(planId) : targetHistory.getActivePlan();
         if (!plan) {
           return {
             content: [
@@ -195,10 +211,15 @@ export function registerThinkingTools(
         .enum(["ticket", "summary", "full"])
         .optional()
         .describe("Return mode: 'ticket' (<50 tokens), 'summary' (~200 tokens), or 'full'"),
+      workspacePath: z
+        .string()
+        .optional()
+        .describe("Target workspace root directory. If omitted, uses current workspace."),
     },
-    async ({ mode = "ticket" }: { mode?: "ticket" | "summary" | "full" }) => {
+    async ({ mode = "ticket", workspacePath }: { mode?: "ticket" | "summary" | "full"; workspacePath?: string }) => {
       try {
-        const plan = historyStore.getActivePlan();
+        const targetHistory = workspacePath ? new PlanHistoryStore(path.resolve(workspacePath)) : historyStore;
+        const plan = targetHistory.getActivePlan();
         if (!plan) {
           return {
             content: [
@@ -257,6 +278,10 @@ export function registerThinkingTools(
     {
       taskDescription: z.string().describe("Description of what this change was intended to accomplish"),
       file: z.string().optional().describe("Optional specific file to restrict the diff review to"),
+      workspacePath: z
+        .string()
+        .optional()
+        .describe("Target workspace root directory. If omitted, uses current workspace."),
       model: z
         .string()
         .optional()
@@ -265,16 +290,19 @@ export function registerThinkingTools(
     async ({
       taskDescription,
       file,
+      workspacePath,
       model,
     }: {
       taskDescription: string;
       file?: string;
+      workspacePath?: string;
       model?: string;
     }) => {
       try {
-        const diff = getGitDiff(workspaceRoot, { file });
-        const testStatus = getTestStatus(workspaceRoot);
-        const executionSummary = getExecutionSummary(workspaceRoot);
+        const targetRoot = workspacePath ? path.resolve(workspacePath) : workspaceRoot;
+        const diff = getGitDiff(targetRoot, { file });
+        const testStatus = getTestStatus(targetRoot);
+        const executionSummary = getExecutionSummary(targetRoot);
 
         if (!diff || diff === "(No diff)") {
           return {
@@ -385,12 +413,19 @@ export function registerThinkingTools(
         .string()
         .optional()
         .describe("Optional specific plan ID to validate from workspace history."),
+      workspacePath: z
+        .string()
+        .optional()
+        .describe("Target workspace root directory. If omitted, uses current workspace."),
     },
-    async ({ planMarkdown, planId }: { planMarkdown?: string; planId?: string }) => {
+    async ({ planMarkdown, planId, workspacePath }: { planMarkdown?: string; planId?: string; workspacePath?: string }) => {
       try {
+        const targetRoot = workspacePath ? path.resolve(workspacePath) : workspaceRoot;
+        const targetHistory = workspacePath ? new PlanHistoryStore(targetRoot) : historyStore;
+
         let markdownToValidate = planMarkdown;
         if (!markdownToValidate) {
-          const plan = planId ? historyStore.getPlanById(planId) : historyStore.getActivePlan();
+          const plan = planId ? targetHistory.getPlanById(planId) : targetHistory.getActivePlan();
           if (!plan) {
             return {
               content: [
@@ -404,7 +439,7 @@ export function registerThinkingTools(
           markdownToValidate = plan.rawMarkdown;
         }
 
-        const result = RulesEngine.validateMarkdownPlan(markdownToValidate, workspaceRoot);
+        const result = RulesEngine.validateMarkdownPlan(markdownToValidate, targetRoot);
 
         const statusText = result.haltRequired
           ? "🛑 HALT ON UNKNOWN REQUIRED"

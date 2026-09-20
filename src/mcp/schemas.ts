@@ -8,7 +8,9 @@ export const TOOL_SCHEMAS: Record<string, any> = {
     description: "Get high-level information about the current workspace (root path, git branch, package manager, detected frameworks).",
     parameters: {
       type: "object",
-      properties: {},
+      properties: {
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
+      },
       additionalProperties: false,
     },
   },
@@ -20,6 +22,7 @@ export const TOOL_SCHEMAS: Record<string, any> = {
       properties: {
         subDir: { type: "string", description: "Subdirectory relative to workspace root" },
         maxDepth: { type: "integer", description: "Maximum directory depth (default: 3)" },
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
       },
       additionalProperties: false,
     },
@@ -33,6 +36,7 @@ export const TOOL_SCHEMAS: Record<string, any> = {
         filePath: { type: "string", description: "Relative path to file within workspace" },
         startLine: { type: "integer", description: "First line to read (1-indexed)" },
         endLine: { type: "integer", description: "Last line to read (inclusive)" },
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
       },
       required: ["filePath"],
       additionalProperties: false,
@@ -48,6 +52,7 @@ export const TOOL_SCHEMAS: Record<string, any> = {
         filePattern: { type: "string", description: "Glob pattern for files to include" },
         caseSensitive: { type: "boolean", description: "Case-sensitive search (default: false)" },
         maxResults: { type: "integer", description: "Maximum matches to return (default: 50)" },
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
       },
       required: ["query"],
       additionalProperties: false,
@@ -58,7 +63,9 @@ export const TOOL_SCHEMAS: Record<string, any> = {
     description: "Get current git status of the workspace (staged, unstaged, untracked files).",
     parameters: {
       type: "object",
-      properties: {},
+      properties: {
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
+      },
       additionalProperties: false,
     },
   },
@@ -70,6 +77,7 @@ export const TOOL_SCHEMAS: Record<string, any> = {
       properties: {
         staged: { type: "boolean", description: "Inspect staged diff only" },
         file: { type: "string", description: "Inspect diff for a specific relative file path" },
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
       },
       additionalProperties: false,
     },
@@ -79,7 +87,9 @@ export const TOOL_SCHEMAS: Record<string, any> = {
     description: "Get test execution results and output from the most recent test run.",
     parameters: {
       type: "object",
-      properties: {},
+      properties: {
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
+      },
       additionalProperties: false,
     },
   },
@@ -88,7 +98,9 @@ export const TOOL_SCHEMAS: Record<string, any> = {
     description: "Get an overview summary of Antigravity's current/recent execution session.",
     parameters: {
       type: "object",
-      properties: {},
+      properties: {
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
+      },
       additionalProperties: false,
     },
   },
@@ -99,6 +111,7 @@ export const TOOL_SCHEMAS: Record<string, any> = {
       type: "object",
       properties: {
         commandIndex: { type: "integer", description: "Index of the command to inspect" },
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
       },
       additionalProperties: false,
     },
@@ -110,6 +123,7 @@ export const TOOL_SCHEMAS: Record<string, any> = {
       type: "object",
       properties: {
         task: { type: "string", description: "The user task or feature description to plan for" },
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
         additionalContext: { type: "string", description: "Additional architectural guidelines, technical constraints, or preferences" },
         model: {
           type: "string",
@@ -133,6 +147,7 @@ export const TOOL_SCHEMAS: Record<string, any> = {
       properties: {
         phaseIndex: { type: "integer", description: "The 1-based index of the phase to retrieve (e.g. 1, 2, 3)" },
         planId: { type: "string", description: "Optional specific plan ID. If omitted, uses active plan." },
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
       },
       required: ["phaseIndex"],
       additionalProperties: false,
@@ -149,6 +164,7 @@ export const TOOL_SCHEMAS: Record<string, any> = {
           enum: ["ticket", "summary", "full"],
           description: "Return mode: 'ticket' (<50 tokens), 'summary' (~200 tokens), or 'full'",
         },
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
       },
       additionalProperties: false,
     },
@@ -161,6 +177,7 @@ export const TOOL_SCHEMAS: Record<string, any> = {
       properties: {
         taskDescription: { type: "string", description: "Description of what this change was intended to accomplish" },
         file: { type: "string", description: "Optional specific file to restrict the diff review to" },
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
         model: {
           type: "string",
           description: "Gemini model to use (default: '3.8 Flash', or '3.1 Pro', '3.5 Flash-Lite')",
@@ -196,6 +213,7 @@ export const TOOL_SCHEMAS: Record<string, any> = {
       properties: {
         planMarkdown: { type: "string", description: "Markdown content of plan to validate. If omitted, validates active plan." },
         planId: { type: "string", description: "Optional specific plan ID to validate from history" },
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
       },
       additionalProperties: false,
     },

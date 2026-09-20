@@ -65,21 +65,15 @@ The G2A Bridge provides Gemini with read-only MCP access to the local workspace,
              └──────────────────────────────┘
 ```
 
-### Stage 1: Initial Handshake (`[G2A] INIT`)
-Antigravity verifies the G2A bridge is active:
-```bash
-g2a status
-```
-If stopped, Antigravity launches it:
-```bash
-g2a start
-```
+### Stage 1: Native MCP Tool Calling (`[G2A] READY`)
+G2A is natively registered in Antigravity (`mcp_config.json`) via Stdio transport.
+**Antigravity does NOT need to run `g2a start` or start any background server.** The MCP tools (`gemini_plan`, `gemini_get_phase`, `gemini_review`, `gemini_think`) are available immediately in every workspace!
 
 ### Stage 2: Planning (`[G2A] PLAN`)
 > [!IMPORTANT]
 > **Antigravity MUST NEVER generate or write a plan itself.** All planning is 100% delegated to Gemini. Antigravity must never create an `implementation_plan.md` using its own model tokens. Antigravity MUST ALWAYS call the MCP tool:
-> `call_mcp_tool(ServerName: "antigravity-with-gemini", ToolName: "gemini_plan", Arguments: { "task": "<User Task Description>" })`
-> Or run the CLI command:
+> `call_mcp_tool(ServerName: "antigravity-with-gemini", ToolName: "gemini_plan", Arguments: { "task": "<User Task Description>", "workspacePath": "<Current Workspace Path>" })`
+> Or from any terminal:
 > `g2a plan "<User Task Description>"`
 
 Gemini uses its deep reasoning tokens (8,192 thinking budget with models > 3.0) and acts as an elite **Principal Software Architect** to formulate a 6-section implementation blueprint according to `RULES.md`:
