@@ -33,6 +33,10 @@ export function registerThinkingTools(
         .enum(["pointer", "compact", "full"])
         .optional()
         .describe("Return format: 'pointer' (<50 tokens ticket, default for zero context bloat), 'compact' (~75% reduction checklist), or 'full'"),
+      model: z
+        .string()
+        .optional()
+        .describe("Gemini model to use (default: '3.8 Flash', or '3.1 Pro', '3.5 Flash-Lite')"),
       compact: z
         .boolean()
         .optional()
@@ -43,11 +47,13 @@ export function registerThinkingTools(
       additionalContext,
       returnMode,
       compact,
+      model,
     }: {
       task: string;
       additionalContext?: string;
       returnMode?: "pointer" | "compact" | "full";
       compact?: boolean;
+      model?: string;
     }) => {
       try {
         const info = workspaceManager.getInfo();
@@ -60,6 +66,7 @@ export function registerThinkingTools(
           gitStatus: gitStatus.summary,
           additionalContext,
           workspaceRoot,
+          model,
         });
 
         const stored = historyStore.savePlan({

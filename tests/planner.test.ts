@@ -261,5 +261,32 @@ Implement hardened Redis caching with DistributedLock to prevent stampede.
     expect(result.title).toBe("Distributed Redis Cache with TTL Invalidation");
     expect(result.phases).toHaveLength(3);
   });
+
+  it("should load physical RULES.MD from disk and inject into prompt", async () => {
+    const { loadRulesContent } = await import("../src/gemini/planner.js");
+    const rulesText = loadRulesContent();
+    expect(rulesText.length).toBeGreaterThan(500);
+    expect(rulesText).toContain("BỘ QUY CHUẨN QUẢN TRỊ KỸ THUẬT: RULES.MD");
+    expect(rulesText).toContain("FUNDAMENTAL AXIOMS");
+
+    let capturedPrompt = "";
+    const mockClient = {
+      generate: vi.fn().mockImplementation(async (prompt: string) => {
+        capturedPrompt = prompt;
+        return { text: sampleArchitectPlan, model: "3.8-flash" };
+      }),
+    } as unknown as GeminiThinkingClient;
+
+    const planner = new GeminiPlanner(mockClient);
+    await planner.createPlan({
+      task: "Build notification service",
+      workspaceSummary: "Project: test",
+      skipReview: true,
+    });
+
+    expect(capturedPrompt).toContain("BỘ QUY CHUẨN QUẢN TRỊ KỸ THUẬT: RULES.MD");
+    expect(capturedPrompt).toContain("FUNDAMENTAL AXIOMS");
+  });
 });
+
 

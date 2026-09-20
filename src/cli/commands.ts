@@ -203,6 +203,8 @@ export async function planCommand(workspaceRoot: string, task: string, options?:
       task,
       workspaceSummary: summary,
       gitStatus: gitStatus.summary,
+      workspaceRoot,
+      model: options?.model,
     });
 
     const historyStore = new PlanHistoryStore(workspaceRoot);

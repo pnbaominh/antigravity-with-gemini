@@ -2,6 +2,9 @@ import type { GeminiGenerationClient } from "./client-interface.js";
 import { RulesEngine } from "../governance/rules-engine.js";
 import { RuleValidationResult } from "../governance/types.js";
 import { PromptSanitizer } from "./prompt-sanitizer.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 export interface PlanResult {
   title: string;
@@ -32,6 +35,41 @@ export interface RefinedPlanResult extends PlanResult {
   haltOnUnknown?: boolean;
 }
 
+/**
+ * Loads the complete physical content of RULES.MD from disk.
+ * Searches workspaceRoot, current working directory, and package roots.
+ */
+export function loadRulesContent(workspaceRoot?: string): string {
+  const candidates: string[] = [];
+  if (workspaceRoot) {
+    candidates.push(path.join(workspaceRoot, "RULES.md"));
+    candidates.push(path.join(workspaceRoot, "RULES.MD"));
+    candidates.push(path.join(workspaceRoot, "rules.md"));
+  }
+  candidates.push(path.join(process.cwd(), "RULES.md"));
+  candidates.push(path.join(process.cwd(), "RULES.MD"));
+  candidates.push(path.join(process.cwd(), "rules.md"));
+
+  try {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    candidates.push(path.resolve(currentDir, "../../RULES.md"));
+    candidates.push(path.resolve(currentDir, "../../../RULES.md"));
+    candidates.push(path.resolve(currentDir, "../../../../RULES.md"));
+  } catch {}
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        const text = fs.readFileSync(candidate, "utf8").trim();
+        if (text.length > 50) {
+          return text;
+        }
+      }
+    } catch {}
+  }
+  return "";
+}
+
 export class GeminiPlanner {
   private client: GeminiGenerationClient;
 
@@ -46,6 +84,7 @@ export class GeminiPlanner {
     additionalContext?: string;
     skipReview?: boolean;
     workspaceRoot?: string;
+    model?: string;
   }): Promise<RefinedPlanResult> {
     const isGreenfield =
       !params.gitStatus ||
@@ -64,64 +103,81 @@ export class GeminiPlanner {
         : `\nNote: Greenfield workspace. Document scaffolding status and treat domain names strictly as configuration constants.\n`
       : "";
 
-    const prompt = isVN
-      ? `Vai trò: Principal Systems Architect & Senior Staff Software Engineer
-Tài liệu: Bản Thiết Kế Kiến Trúc Kỹ Thuật & Kế Hoạch Triển Khai Phần Mềm (Technical Architecture RFC & Execution Plan)
-Khung quy chuẩn: RULES.MD (Technical Planning & Execution Governance Framework)
+    const rulesDoc = loadRulesContent(params.workspaceRoot);
+    const rulesSection = rulesDoc
+      ? isVN
+        ? `\n================================================================================\nBỘ QUY CHUẨN QUẢN TRỊ KỸ THUẬT: RULES.MD (TOÀN VĂN BẮT BUỘC TUÂN THỦ 100%):\n--------------------------------------------------------------------------------\n${rulesDoc}\n================================================================================\n`
+        : `\n================================================================================\nTECHNICAL GOVERNANCE STANDARD: RULES.MD (FULL MANDATORY SPECIFICATION TEXT):\n--------------------------------------------------------------------------------\n${rulesDoc}\n================================================================================\n`
+      : "";
 
-Mục tiêu phát triển hệ thống:
+    const prompt = isVN
+      ? `${rulesSection}
+Vai trò: Principal Systems Architect & Senior Staff Software Engineer
+Tài liệu: Bản Thiết Kế Kiến Trúc Kỹ Thuật Hệ Thống & Kế Hoạch Triển Khai Thực Thi (Technical Architecture RFC & Phased Execution Plan)
+Quy chuẩn áp dụng: RULES.MD (đã được đính kèm toàn văn ở trên)
+
+MỤC TIÊU PHÁT TRIỂN HỆ THỐNG / YÊU CẦU DỰ ÁN:
 "${params.task}"
 ${greenfieldNote}
 ${params.workspaceSummary ? `Thông tin Workspace hiện tại:\n${params.workspaceSummary}\n` : ""}
 ${params.gitStatus ? `Trạng thái Git:\n${params.gitStatus}\n` : ""}
-${params.additionalContext ? `Ngữ cảnh kỹ thuật:\n${params.additionalContext}\n` : ""}
+${params.additionalContext ? `Ngữ cảnh kỹ thuật bổ sung:\n${params.additionalContext}\n` : ""}
 
-Là một Kiến trúc sư trưởng, bạn phải lập một bản kế hoạch kiến trúc kỹ thuật hoàn chỉnh, chi tiết và có tính thực thi tuyệt đối cho AI Agent / Kỹ sư phần mềm. Kế hoạch PHẢI tuân thủ nghiêm ngặt 5 Tiên Đề Bất Biến của khung quản trị RULES.MD:
-1. Evidence-Based Grounding: Khảo sát thực tế hệ thống, lựa chọn Tech Stack tối ưu với lý lẽ kỹ thuật rõ ràng, sơ đồ luồng dữ liệu đa tầng (Mermaid flowchart TD), cấu trúc thư mục định danh tệp ([NEW], [MODIFY], [DELETE]), và các TypeScript Interfaces / Data Contracts đầy đủ.
-2. Scope Discipline (Non-Goals >= 3): Bắt buộc nêu rõ tối thiểu 3 mục dứt khoát NẰM NGOÀI PHẠM VI (Out-of-Scope) kèm lý do kỹ thuật để triệt tiêu phình phạm vi.
-3. Halt-on-Unknown Protocol: Xác định rõ trạng thái CLEAR hay HALT. Nếu thiếu thông số phần cứng/hệ điều hành chí mạng, phải chỉ rõ để kiểm chứng thực nghiệm trước.
-4. Quản trị rủi ro chủ động (Bảng RAID Log >= 4 mục): Phân tích Rủi ro kỹ thuật (Risks), Giả định (Assumptions), Phụ thuộc (Dependencies) với giải pháp phòng ngừa chủ động và phân quyền Single DRI.
-5. Phân rã WBS (Quy tắc 8/80) & Ước lượng PERT: Chia thành các Phase tuần tự, mỗi task có lệnh shell nhị phân (Verification Command) và ước tính 3 điểm PERT: E = (O + 4M + P) / 6.
-6. Cổng chất lượng nhị phân (Binary DoD): 100% test pass, 0 type errors, 0 lint warnings, clean build.
+Là Kiến trúc sư trưởng (Lead Architect), bạn phải lập một bản Kế Hoạch Kỹ Thuật chuyên sâu, chi tiết đến từng tệp mã nguồn, rành mạch, không mơ hồ và có tính thực thi 100% cho AI Agent / Kỹ sư phần mềm. 
 
-Trình bày tài liệu bắt đầu ngay lập tức theo định dạng Markdown tiêu chuẩn sau:
+Kế hoạch PHẢI tuân thủ đầy đủ 5 Tiên Đề Bất Biến và cấu trúc 6 phần bắt buộc của RULES.MD:
 
-# Plan: [Tên Kiến Trúc Kỹ Thuật Hệ Thống]
+# Plan: [Tên Kiến Trúc Kỹ Thuật Hệ Thống Cụ Thể]
 DRI: lead_architect
 
 ## 1. AS-IS State & System Architecture Blueprint
-- Hiện trạng hệ thống & Cơ sở lý luận lựa chọn Tech Stack (Runtime, Framework, UI, State, Security/Native APIs).
-- Sơ đồ kiến trúc & luồng dữ liệu (Mermaid flowchart TD).
-- Cấu trúc thư mục & phân tầng mã nguồn định danh tệp ([NEW], [MODIFY], [DELETE]).
-- Định nghĩa TypeScript interfaces & Data contracts cốt lõi.
+- Hiện trạng hệ thống: Khảo sát thực tế hiện trạng mã nguồn, cấu hình workspace, các thư viện/frameworks sẵn có.
+- Cơ sở lý luận lựa chọn Tech Stack: Phân tích kỹ thuật chuyên sâu tại sao chọn từng công nghệ (Runtime, Framework, UI/Component library, State Management, Styling, Test Runner, Native/OS APIs) thay vì các giải pháp thay thế.
+- Sơ đồ kiến trúc & luồng dữ liệu đa tầng (bắt buộc dùng Mermaid flowchart TD): Trình bày trực quan luồng tương tác giữa User, Frontend/UI components, State/Store, API/Bridge Services, Native OS APIs / Database.
+- Cấu trúc thư mục định danh tệp: Liệt kê đầy đủ mọi tệp trong dự án với nhãn cụ thể ([NEW], [MODIFY], [DELETE]) và đường dẫn tương đối rõ ràng.
+- Định nghĩa TypeScript Interfaces & Data Contracts: Khai báo đầy đủ các interface/types TypeScript cốt lõi của hệ thống (Domain entities, Request/Response payloads, Component props, Store state). Tuyệt đối không dùng pseudo-code hay placeholder.
 
-## 2. Non-Goals & Phạm Vi Dự Án (Tối thiểu 3 mục ngoài phạm vi)
-1. [Mục 1 ngoài phạm vi & lý do kỹ thuật kiên quyết không làm trong chu kỳ này]
-2. [Mục 2 ngoài phạm vi & lý do kỹ thuật]
-3. [Mục 3 ngoài phạm vi & lý do kỹ thuật]
+## 2. Non-Goals & Phạm Vi Dự Án (Bắt buộc tối thiểu 3 mục ngoài phạm vi)
+Nêu rõ tối thiểu 3 hạng mục kỹ thuật liên quan trực tiếp nhưng kiên quyết từ chối thực hiện trong chu kỳ này kèm lý lẽ kỹ thuật rõ ràng để triệt tiêu scope creep:
+1. [Mục loại trừ 1 & lý do kỹ thuật dứt khoát không làm]
+2. [Mục loại trừ 2 & lý do kỹ thuật dứt khoát không làm]
+3. [Mục loại trừ 3 & lý do kỹ thuật dứt khoát không làm]
 
-## 3. Unknowns & Kiểm Tra Kỹ Thuật (Halt-on-Unknown)
-- Status: CLEAR (hoặc HALT nếu có ẩn số kỹ thuật chí mạng)
-- Unknowns: None (hoặc danh sách các điểm cần làm rõ)
+## 3. Unknowns & Kiểm Tra Kỹ Thuật (Halt-on-Unknown Protocol)
+- Status: CLEAR (hoặc HALT nếu phát hiện thiếu hụt thông số kỹ thuật chí mạng)
+- Unknowns: None (hoặc danh sách các ẩn số kỹ thuật cần giải quyết bằng thực nghiệm trước khi code)
 
-## 4. Quản Trị Rủi Ro & Bảng RAID Log (Tối thiểu 4 mục)
+## 4. Quản Trị Rủi Ro & Bảng RAID Log (Bắt buộc tối thiểu 4 mục phân tích sâu)
+Bảng Pre-Mortem phân tích rủi ro kỹ thuật, giả định, phụ thuộc với chiến lược phòng ngừa chủ động và phân quyền Single DRI:
 | ID | Category | Description | Impact | Likelihood | Mitigation Strategy | Owner DRI |
-| R-1 | Risk | Concurrency & Async state hazards | High | Medium | Defensive locks / debounce | lead_architect |
-| R-2 | Risk | Platform quirks (Windows vs POSIX paths, CRLF, Admin UAC) | Medium | High | Path normalization & execution checks | lead_architect |
-| R-3 | Risk | Network / OS API timeouts & error boundaries | High | Low | Exponential backoff & graceful fail-safe | lead_architect |
-| A-1 | Assumption | Host environment & OS version compatibility | Medium | Low | Runtime prerequisite verification | lead_architect |
+| R-1 | Risk | Concurrency & Async State Hazards (Race conditions, double submit, stale state) | High | Medium | Defensive locks, debounce, optimistic UI rollback | lead_architect |
+| R-2 | Risk | Platform Quirks (Windows vs POSIX paths, CRLF vs LF, npm.cmd vs npm, UAC) | Medium | High | Normalized path utilities, cross-env, explicit npm.cmd execution | lead_architect |
+| R-3 | Risk | Network / OS API Timeouts & Rate Limits | High | Low | Exponential backoff with jitter, circuit breaker, graceful failover | lead_architect |
+| A-1 | Assumption | Host Runtime & Browser Environment Compatibility | Medium | Low | Runtime prerequisite verification at startup | lead_architect |
 
 ## 5. Work Breakdown Structure (WBS) & Phân Chia Giai Đoạn (PERT)
-Chia thành các Phase cụ thể (Phase 1: Khởi tạo Scaffolding & Types, Phase 2: Domain Logic & Security/Core Engines, Phase 3: GUI & User Interactions, Phase 4: Production Build & Hardening).
-Mỗi task có nhãn file ([NEW], [MODIFY]), single DRI (DRI: lead_architect), lệnh kiểm thử shell nhị phân (Verification Command) và ước tính PERT (PERT: O=...h, M=...h, P=...h, E=...h).
+Phân rã thành các Phase tuần tự theo quy tắc 8/80 (Phase 1: Foundation, Scaffolding & Types; Phase 2: Domain Logic & Core Services; Phase 3: UI Components & User Flow; Phase 4: Integration, Hardening & Production Build).
+Mỗi Phase BẮT BUỘC phải có:
+- Tên Phase được danh từ hóa theo sản phẩm chuyển giao (ví dụ: "Phase 1: Module Nền Tảng & Đặc Tả Types").
+- Danh sách các vi tác vụ atomic (đánh dấu [NEW], [MODIFY], [DELETE]) với Single DRI (DRI: lead_architect).
+- Lệnh kiểm thử nhị phân độc lập (Verification Command) có thể chạy trực tiếp bằng shell (ví dụ: npm.cmd test tests/unit.test.ts hoặc npx tsc --noEmit).
+- Ước lượng 3 điểm PERT định lượng: PERT: O=...h, M=...h, P=...h, E=...h, Sigma=...h.
 
 ## 6. Definition of Done & Tiêu Chuẩn Nghiệm Thu
-Tiêu chuẩn pass/fail nhị phân: 100% test pass, 0 type errors, 0 lint warnings, clean build.
+Tiêu chí nghiệm thu nhị phân (Binary Pass/Fail):
+- [ ] 100% automated unit and integration tests PASS
+- [ ] Zero TypeScript compilation errors (tsc --noEmit clean)
+- [ ] Zero ESLint / linter warnings
+- [ ] Clean production build (npm run build succeeded)
+- [ ] Mọi tệp mới đều có header tài liệu kỹ thuật và tuân thủ chuẩn kiến trúc.
 
-Yêu cầu xuất: Bắt đầu trực tiếp với "# Plan: [Tiêu đề]", không xuất lời chào hay văn bản giao tiếp thừa thãi.`
-      : `Role: Principal Systems Architect & Senior Staff Software Engineer
+YÊU CẦU ĐỊNH DẠNG:
+- Bắt đầu trực tiếp bằng "# Plan: [Tiêu đề]", TUYỆT ĐỐI không xuất bất kỳ lời chào hay câu mở đầu nào.
+- Xuất đầy đủ toàn văn, không cắt bớt, không dùng "..." hay placeholder.`
+      : `${rulesSection}
+Role: Principal Systems Architect & Senior Staff Software Engineer
 Document: Technical Architecture RFC & Phased Implementation Plan
-Governance Standard: RULES.MD (Technical Planning & Execution Governance Framework)
+Governance Standard: RULES.MD (Full specification provided above)
 
 System Development Objective:
 "${params.task}"
@@ -130,42 +186,36 @@ ${params.workspaceSummary ? `Workspace Info:\n${params.workspaceSummary}\n` : ""
 ${params.gitStatus ? `Git Status:\n${params.gitStatus}\n` : ""}
 ${params.additionalContext ? `Context:\n${params.additionalContext}\n` : ""}
 
-As Lead Architect, formulate an authoritative, highly detailed technical implementation plan with 100% execution precision for AI coding agents and engineers. The plan MUST strictly adhere to the 5 Fundamental Axioms of the RULES.MD governance framework:
-1. Evidence-Based Grounding: Thorough AS-IS assessment, rigorous tech stack selection with technical rationale, multi-tier data flow diagram (Mermaid flowchart TD), directory layout with explicit file tags ([NEW], [MODIFY], [DELETE]), and typed interface contracts.
-2. Scope Discipline (Non-Goals >= 3): Explicitly enumerate at least 3 directly related items decisively OUT OF SCOPE to prevent scope creep.
-3. Halt-on-Unknown Protocol: Declare Status: CLEAR or HALT. If critical technical parameters are missing, halt and list required empirical tests.
-4. Active Risk Governance (RAID Log >= 4 entries): Systemic table analyzing Risks (concurrency, platform quirks, timeouts), Assumptions, Dependencies with proactive mitigations and Single DRI.
-5. Phased WBS (8/80 Rule) & PERT Estimation: Decompose into sequenced phases, each task with runnable shell verification command and 3-point PERT estimate: E = (O + 4M + P) / 6.
-6. Binary Quality Gates (DoD): 100% test pass, 0 type errors, 0 lint warnings, clean build.
+As Lead Architect, formulate an authoritative, highly detailed technical implementation plan with 100% execution precision for AI coding agents and engineers. The plan MUST strictly adhere to the 5 Fundamental Axioms and mandatory 6-section structure of RULES.MD:
 
-Follow this standard technical blueprint:
 # Plan: [Concise Architecture Title]
 DRI: lead_architect
 
 ## 1. AS-IS State & System Architecture Blueprint
-- System Overview & Tech Stack Selection (Runtime, Framework, UI, State, Testing)
-- Architecture & Data Flow Diagram (Mermaid flowchart TD)
-- Directory & File Layout with tags ([NEW], [MODIFY], [DELETE])
-- Core TypeScript Interfaces & Data Contracts
+- System Overview & Tech Stack Selection (Runtime, Framework, UI, State, Testing, Native APIs) with rigorous technical rationales
+- Architecture & Multi-Tier Data Flow Diagram (Mermaid flowchart TD)
+- Directory & File Layout with explicit file tags ([NEW], [MODIFY], [DELETE]) and relative paths
+- Core TypeScript Interfaces & Data Contracts written out with full type declarations
 
 ## 2. Non-Goals & Scope Boundaries (Mandatory >= 3)
+Explicitly enumerate at least 3 directly related items decisively OUT OF SCOPE with technical rationales:
 1. ...
 2. ...
 3. ...
 
 ## 3. Unknowns & Halt Checks
-Status: CLEAR
-Unknowns: None
+Status: CLEAR (or HALT if critical technical parameters are missing)
+Unknowns: None (or list of required empirical tests)
 
 ## 4. Risk Assessment & RAID Log (Mandatory >= 4 entries)
 | ID | Category | Description | Impact | Likelihood | Mitigation Strategy | Owner DRI |
 | R-1 | Risk | Concurrency & Async state hazards | High | Medium | Defensive locks / debounce | lead_architect |
-| R-2 | Risk | Platform quirks (Windows vs POSIX paths, CRLF) | Medium | High | Path normalization & npm.cmd | lead_architect |
+| R-2 | Risk | Platform quirks (Windows vs POSIX paths, CRLF, npm.cmd) | Medium | High | Path normalization & cross-env | lead_architect |
 | R-3 | Risk | Network timeouts & API error boundaries | High | Low | Exponential backoff & retry | lead_architect |
 | A-1 | Assumption | Browser runtime compatibility | Medium | Low | Runtime validation checks | lead_architect |
 
 ## 5. Work Breakdown Structure (WBS) & Phased Implementation
-Break down into sequenced phases (Phase 1, Phase 2, Phase 3) with atomic tasks ([NEW], [MODIFY]), single DRI (DRI: lead_architect), concrete runnable shell verification commands, and PERT estimations.
+Sequenced phases following the 8/80 rule. Each task must have atomic tags ([NEW], [MODIFY]), single DRI (lead_architect), concrete runnable shell verification commands, and 3-point PERT estimations: E = (O + 4M + P) / 6.
 
 ## 6. Definition of Done & Quality Gates
 Binary pass/fail criteria: 100% test pass, 0 type errors, clean build.
@@ -178,6 +228,7 @@ Output Requirement: Directly begin your response with "# Plan: [Title]". Do not 
     const draftResponse = await this.client.generate(prompt, {
       systemInstruction,
       thinkingBudget: 4096,
+      model: params.model,
     });
 
     const draftMarkdown = draftResponse.text;
@@ -222,6 +273,7 @@ Output Requirement: Directly begin your response with "# Plan: [Title]". Do not 
         draftMarkdown,
         audit,
         systemInstruction,
+        model: params.model,
       });
     }
 
@@ -387,6 +439,7 @@ Audit this plan with high engineering standards. If the plan is shallow, lacks c
     draftMarkdown: string;
     audit: PlanReviewAudit;
     systemInstruction: string;
+    model?: string;
   }): Promise<string> {
     const { sanitizedTask } = PromptSanitizer.sanitizeTask(params.task);
 
@@ -413,6 +466,7 @@ Format requirement: Directly begin your output with "# Plan: [Title]". Output pu
       const refinedResponse = await this.client.generate(refinePrompt, {
         systemInstruction: params.systemInstruction,
         thinkingBudget: 4096,
+        model: params.model,
       });
 
       const refinedText = refinedResponse.text?.trim();
