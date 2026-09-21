@@ -67,4 +67,30 @@ Build resilient browser automation bridge.
     expect(planResult.phases[0].phase).toContain("Setup");
     expect(mockWebClient.generate).toHaveBeenCalled();
   });
+
+  it("should detect Vietnamese and English backend refusal messages accurately", () => {
+    const client = new GeminiWebClient();
+
+    // Vietnamese refusals
+    expect(
+      client.isBackendError("Tôi chỉ là một mô hình ngôn ngữ, nên không thể trợ giúp về điều đó.")
+    ).toBe(true);
+    expect(client.isBackendError("Tôi không thể hỗ trợ điều đó")).toBe(true);
+    expect(client.isBackendError("Tôi là một mô hình ngôn ngữ lớn")).toBe(true);
+    expect(client.isBackendError("Đã xảy ra sự cố trong quá trình xử lý")).toBe(true);
+
+    // English refusals
+    expect(client.isBackendError("I'm just a language model, so I can't help with that.")).toBe(true);
+    expect(client.isBackendError("As a language model, I cannot assist with this request.")).toBe(true);
+    expect(client.isBackendError("Sorry, something went wrong. Please try again.")).toBe(true);
+
+    // Valid plan outputs should NOT be flagged as errors
+    expect(client.isBackendError("# Plan: System Architecture\n## 1. AS-IS State")).toBe(false);
+    expect(
+      client.isBackendError(
+        "# Plan: Microservices Migration\nDRI: lead_architect\n## 1. AS-IS State & System Architecture Blueprint"
+      )
+    ).toBe(false);
+  });
 });
+

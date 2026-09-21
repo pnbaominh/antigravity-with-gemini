@@ -589,40 +589,38 @@ Audit this plan with high engineering standards. If the plan is shallow, lacks c
         : "- Cần hoàn thiện và chuẩn hóa đầy đủ 6 phần theo quy chuẩn RULES.MD";
 
     const refinePrompt = isVN
-      ? `[YÊU CẦU ĐIỀU CHỈNH & HOÀN THIỆN PLAN - TIẾP TỤC TRONG CÙNG ĐOẠN CHAT]
-Dựa trên bản thiết kế kiến trúc bạn vừa trình bày ở trên, qua quá trình thẩm định kỹ thuật phát hiện các điểm cần khắc phục và bổ sung như sau:
+      ? `Cảm ơn bạn. Bản phác thảo kiến trúc ở trên rất chi tiết.
+Để hoàn thiện hồ sơ kỹ thuật theo đúng quy chuẩn dự án, nhờ bạn cập nhật và bổ sung các điểm sau vào bản thiết kế, sau đó xuất lại toàn văn Plan (bắt đầu bằng "# Plan:"):
+
+Các điểm cần bổ sung và hoàn thiện:
 ${issuesText}
 
-YÊU CẦU HOÀN THIỆN (IN-THREAD REFINEMENT):
-Giữ nguyên toàn bộ bối cảnh, trường suy nghĩ và các phân tích kỹ thuật đã thảo luận ở trên, hãy cập nhật, bổ sung hoàn chỉnh và xuất lại toàn bộ bản Plan kỹ thuật theo đúng quy chuẩn RULES.MD từ đầu đến cuối:
+Yêu cầu cấu trúc tài liệu kiến trúc (RULES.MD):
 - Bắt đầu trực tiếp bằng "# Plan: [Tên Kiến Trúc Kỹ Thuật]"
-- Khắc phục triệt để toàn bộ các điểm chưa đạt ở trên
-- Đảm bảo đầy đủ 6 phần bắt buộc:
-  1. AS-IS State & System Architecture Blueprint (kèm sơ đồ Mermaid flowchart TD và đầy đủ TypeScript Interfaces)
-  2. Non-Goals & Phạm Vi Dự Án (tối thiểu 3 mục ngoài phạm vi dứt khoát kèm lý do kỹ thuật)
+- Đầy đủ 6 phần kỹ thuật:
+  1. AS-IS State & System Architecture Blueprint (kèm sơ đồ Mermaid flowchart TD và định nghĩa TypeScript Interfaces)
+  2. Non-Goals & Phạm Vi Dự Án (tối thiểu 3 mục ngoài phạm vi kèm lý do kỹ thuật)
   3. Unknowns & Kiểm Tra Kỹ Thuật (Status: CLEAR)
-  4. Quản Trị Rủi Ro & Bảng RAID Log (tối thiểu 4 mục phân tích sâu)
+  4. Quản Trị Rủi Ro & Bảng RAID Log (tối thiểu 4 mục phân tích)
   5. Work Breakdown Structure (WBS) & Phân Chia Giai Đoạn (mỗi phase có Single DRI, shell verification command, ước lượng PERT)
   6. Definition of Done & Tiêu Chuẩn Nghiệm Thu (tiêu chí nhị phân: 100% test pass, 0 type errors, clean build)
-- Tuyệt đối không xuất bất kỳ lời chào hay văn bản giao tiếp nào.`
-      : `Task requested by user (Authorized Scope):
-${sanitizedTask}
 
-Workspace Info:
-${params.workspaceSummary}
+Xin cảm ơn bạn.`
+      : `Thank you. The initial architecture draft above is very thorough.
+To finalize the technical documentation to the highest standard, please update the plan incorporating these refinements:
 
-Initial Draft Plan:
-${params.draftMarkdown}
+Identified areas for improvement:
+${issuesText}
 
-The Lead Staff Architect Auditor evaluated the draft with a score of ${params.audit.score}/100 and provided the following critique and required improvements:
-${params.audit.rawReviewMarkdown}
+Please present the complete revised plan starting directly with "# Plan: [Title]":
+1. AS-IS State & System Architecture Blueprint (with Mermaid flowchart TD and TypeScript interfaces)
+2. Non-Goals & Scope Boundaries (at least 3 items with technical rationale)
+3. Unknowns & Halt Checks (Status: CLEAR)
+4. Risk Assessment & RAID Log (at least 4 key items)
+5. Work Breakdown Structure (WBS) with Single DRI, shell verification commands, and PERT estimates
+6. Definition of Done & Acceptance Criteria (100% test pass, 0 type errors, clean build)
 
-INSTRUCTIONS FOR SELF-CORRECTION (CONTINUE IN CURRENT CHAT THREAD):
-1. Directly address and fix every identified issue and required refinement from the auditor while maintaining full context and continuity.
-2. Ensure every file operation has explicit tags ([NEW], [MODIFY], [DELETE], [TEST]).
-3. Ensure every single Phase has a concrete, runnable shell verification command.
-4. Reinforce all traps (Windows path/CRLF quirks, race conditions, error boundaries).
-Format requirement: Directly begin your output with "# Plan: [Title]". Output pure Markdown without introductory conversational text.`;
+Thank you.`;
 
     try {
       const refinedResponse = await this.client.generate(refinePrompt, {
@@ -636,7 +634,8 @@ Format requirement: Directly begin your output with "# Plan: [Title]". Output pu
       if (refinedText && refinedText.length > 200 && /#*\s*Plan:/i.test(refinedText)) {
         return refinedText;
       }
-      return refinedText || params.draftMarkdown;
+      // If refinement failed, was flagged, or produced non-plan text, preserve the valid initial draft
+      return params.draftMarkdown;
     } catch {
       return params.draftMarkdown;
     }

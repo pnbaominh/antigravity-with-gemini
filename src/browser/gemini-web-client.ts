@@ -380,10 +380,11 @@ export class GeminiWebClient implements GeminiGenerationClient {
       process.env.GEMINI_MODEL ||
       "3.8 Flash";
 
-    // Clean, natural prompt incorporating system instruction if provided
+    // Clean, natural prompt incorporating system instruction if provided (fresh chats only)
     let fullPrompt = prompt;
     if (
       options?.systemInstruction &&
+      !isContinuing &&
       !prompt.includes("Vai trò:") &&
       !prompt.includes("Role:") &&
       !prompt.includes("chuẩn RULES.MD")
@@ -402,9 +403,9 @@ export class GeminiWebClient implements GeminiGenerationClient {
       if (isContinuing) {
         // When continuing conversation, try in-chat re-prompting first instead of blowing away the chat
         console.warn(
-          `[GeminiWeb Client] Response in existing thread was truncated or flagged ("${(extracted || "").slice(0, 50)}..."). Re-prompting in current thread...`
+          `[GeminiWeb Client] Response in existing thread was truncated or flagged ("${(extracted || "").slice(0, 50)}..."). Re-prompting politely in current thread...`
         );
-        const retryPrompt = `Vui lòng tập trung hoàn thiện và xuất lại đầy đủ toàn văn bản Kế Hoạch Kiến Trúc Kỹ Thuật (bắt đầu bằng "# Plan:"):`;
+        const retryPrompt = `Cảm ơn bạn. Nhờ bạn trình bày chi tiết bản Kế Hoạch Kiến Trúc Kỹ Thuật bắt đầu bằng "# Plan:":`;
         const retryExtracted = await this.submitAndExtract(page, retryPrompt);
         if (retryExtracted && !this.isBackendError(retryExtracted) && retryExtracted.length > 200) {
           return {
@@ -412,6 +413,12 @@ export class GeminiWebClient implements GeminiGenerationClient {
             model: activeModel,
           };
         }
+        // In continuing conversation, NEVER call executeAutonomousBypass (which calls resetToFreshChat)
+        // Return whatever was obtained so the planner falls back to draftMarkdown while keeping chat intact
+        return {
+          text: retryExtracted || extracted || "",
+          model: activeModel,
+        };
       }
 
       return await this.executeAutonomousBypass(
@@ -459,10 +466,24 @@ export class GeminiWebClient implements GeminiGenerationClient {
     const textbox = page.locator(inputSelector).first();
     await textbox.waitFor({ timeout: 15_000 });
     await textbox.click();
+    await page.waitForTimeout(300);
 
-    // Count existing responses to detect when new response arrives
-    const initialResponseCount = await page.evaluate(() => {
-      return document.querySelectorAll('message-content, .model-response, [data-test-id="model-response"]').length;
+    // Clear any residual draft in the input box
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.press("Backspace");
+    await page.waitForTimeout(200);
+
+    // Count existing responses and record current text to detect when new turn arrives
+    const { initialResponseCount, initialLatestText } = await page.evaluate(() => {
+      const responseEls = document.querySelectorAll(
+        'message-content, .model-response, [data-test-id="model-response"]'
+      );
+      const count = responseEls.length;
+      let text = "";
+      if (count > 0) {
+        text = ((responseEls[count - 1] as HTMLElement).innerText || "").trim();
+      }
+      return { initialResponseCount: count, initialLatestText: text };
     });
 
     // Insert text using native keyboard input to preserve Quill's internal Delta state
@@ -476,25 +497,53 @@ export class GeminiWebClient implements GeminiGenerationClient {
       )
       .first();
 
-    if (await sendButton.isVisible() && (await sendButton.isEnabled())) {
-      await sendButton.click();
-    } else {
+    let sent = false;
+    try {
+      if (await sendButton.isVisible({ timeout: 2000 })) {
+        for (let i = 0; i < 10; i++) {
+          if (await sendButton.isEnabled()) {
+            await sendButton.click();
+            sent = true;
+            break;
+          }
+          await page.waitForTimeout(300);
+        }
+      }
+    } catch {}
+
+    if (!sent) {
       await page.keyboard.press("Enter");
     }
 
-    // Wait for response generation to complete
+    // Wait for response generation to start
     const timeoutMs = this.config.timeoutMs || 180_000;
     const startTime = Date.now();
 
-    // Wait until response count increments
-    while (Date.now() - startTime < 25_000) {
-      const currentCount = await page.evaluate(() => {
-        return document.querySelectorAll('message-content, .model-response, [data-test-id="model-response"]').length;
-      });
-      if (currentCount > initialResponseCount) {
+    while (Date.now() - startTime < 20_000) {
+      const isStarted = await page.evaluate(
+        ({ initCount, initText }) => {
+          const stopBtn =
+            document.querySelector('button[aria-label*="Stop"], button[aria-label*="Dừng"]') ||
+            document.querySelector('mat-spinner, .loading-indicator');
+          if (stopBtn) return true;
+
+          const responseEls = document.querySelectorAll(
+            'message-content, .model-response, [data-test-id="model-response"]'
+          );
+          if (responseEls.length > initCount) return true;
+          if (responseEls.length > 0) {
+            const currentText = ((responseEls[responseEls.length - 1] as HTMLElement).innerText || "").trim();
+            if (currentText && currentText !== initText) return true;
+          }
+          return false;
+        },
+        { initCount: initialResponseCount, initText: initialLatestText }
+      );
+
+      if (isStarted) {
         break;
       }
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(400);
     }
 
     // Wait until generation finishes (Stop button disappears and content stabilizes)
@@ -502,9 +551,9 @@ export class GeminiWebClient implements GeminiGenerationClient {
     let stableCount = 0;
 
     while (Date.now() - startTime < timeoutMs) {
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(1000);
 
-      const status = await page.evaluate(() => {
+      const status = await page.evaluate((initText) => {
         const stopBtn =
           document.querySelector('button[aria-label*="Stop"], button[aria-label*="Dừng"]') ||
           document.querySelector('mat-spinner, .loading-indicator');
@@ -516,19 +565,31 @@ export class GeminiWebClient implements GeminiGenerationClient {
         let latestText = "";
         if (responseEls.length > 0) {
           const lastEl = responseEls[responseEls.length - 1] as HTMLElement;
-          latestText = lastEl.innerText || "";
+          latestText = (lastEl.innerText || "").trim();
         }
+
+        const isNewText = latestText !== initText;
 
         return {
           isGenerating,
           latestText,
+          isNewText,
         };
-      });
+      }, initialLatestText);
 
-      if (status.latestText.length > 50) {
+      // Fast-exit if backend refusal or error is detected and generation has stopped
+      if (!status.isGenerating && status.latestText.length > 0 && this.isBackendError(status.latestText)) {
+        console.warn(
+          `[GeminiWeb Client] Backend error or safety refusal detected: "${status.latestText.slice(0, 80)}..."`
+        );
+        break;
+      }
+
+      // Check stabilization on new text
+      if (status.latestText.length > 0 && (status.isNewText || initialLatestText === "")) {
         if (status.latestText === lastContent && !status.isGenerating) {
           stableCount++;
-          if (stableCount >= 3) {
+          if (stableCount >= 2) {
             break;
           }
         } else {
@@ -570,6 +631,8 @@ export class GeminiWebClient implements GeminiGenerationClient {
       lower.includes("tôi đã gặp lỗi khi thực hiện") ||
       lower.includes("tôi dường như đang gặp lỗi") ||
       lower.includes("tôi không thể trợ giúp về điều đó") ||
+      lower.includes("không thể trợ giúp về điều đó") ||
+      lower.includes("tôi không thể hỗ trợ điều đó") ||
       lower.includes("tôi không thể hỗ trợ") ||
       lower.includes("tôi không thể thực hiện") ||
       lower.includes("tôi không thể hoàn thành") ||
@@ -581,6 +644,8 @@ export class GeminiWebClient implements GeminiGenerationClient {
       lower.includes("không thể trợ giúp bạn") ||
       lower.includes("là một mô hình ngôn ngữ") ||
       lower.includes("tôi là một mô hình ngôn ngữ") ||
+      lower.includes("tôi chỉ là một mô hình ngôn ngữ") ||
+      lower.includes("tôi chỉ là mô hình ngôn ngữ") ||
       lower.includes("tôi là một công nghệ trí tuệ nhân tạo") ||
       lower.includes("tôi chỉ là một mô hình") ||
       lower.includes("tôi không được lập trình") ||
@@ -589,6 +654,9 @@ export class GeminiWebClient implements GeminiGenerationClient {
       lower.includes("can't help with that") ||
       lower.includes("cannot assist") ||
       lower.includes("as a language model") ||
+      lower.includes("i'm just a language model") ||
+      lower.includes("i am just a language model") ||
+      lower.includes("i am an ai language model") ||
       lower.includes("unable to assist") ||
       lower.includes("i cannot generate") ||
       lower.includes("safety policy") ||
