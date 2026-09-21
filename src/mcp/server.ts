@@ -293,7 +293,8 @@ export function createG2AMcpServer(
   );
 
   // Always register Gemini thinking tools (gemini_plan, gemini_review, gemini_think)
-  const geminiClient = options.geminiClient ?? createDefaultClient();
+  const defaultModel = process.env.GEMINI_MODEL || "3.8 Flash";
+  const geminiClient = options.geminiClient ?? createDefaultClient(defaultModel);
   registerThinkingTools(server, workspaceRoot, geminiClient);
 
   return server;

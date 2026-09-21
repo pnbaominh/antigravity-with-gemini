@@ -346,11 +346,13 @@ Output Requirement: Directly begin your response with "# Plan: [Title]". Do not 
 
     const systemInstruction = `Role: Principal Software Architect. Purpose: "Gemini Thinks. Antigravity Works." Operating under RULES.MD technical governance. Output pure technical Markdown plan starting with "# Plan:".`;
 
+    const targetModel = params.model || process.env.GEMINI_MODEL || "3.8 Flash";
+
     // 1. Generate initial draft plan (Turn 1: starts fresh chat session)
     const draftResponse = await this.client.generate(prompt, {
       systemInstruction,
       thinkingBudget: 4096,
-      model: params.model,
+      model: targetModel,
       continueConversation: false,
     });
 
@@ -374,17 +376,18 @@ Output Requirement: Directly begin your response with "# Plan: [Title]". Do not 
       };
     }
 
-    // 2. Perform Adversarial Architect Audit (Self-Review)
+    // 2. Perform Adversarial Architect Audit (Self-Review within same thread)
     const audit = await this.auditPlan({
       task: params.task,
       workspaceSummary: params.workspaceSummary,
       draftMarkdown,
       workspaceRoot: params.workspaceRoot,
+      model: targetModel,
     });
 
     let finalMarkdown = draftMarkdown;
 
-    // 3. Perform Self-Correction if audit detected issues or score < 90
+    // 3. Perform Self-Correction in the EXACT SAME CHAT THREAD if audit detected issues or score < 90
     if (
       audit.verdict === "REFINED" ||
       audit.score < 90 ||
@@ -396,7 +399,7 @@ Output Requirement: Directly begin your response with "# Plan: [Title]". Do not 
         draftMarkdown,
         audit,
         systemInstruction,
-        model: params.model,
+        model: targetModel,
       });
     }
 
@@ -424,6 +427,7 @@ Output Requirement: Directly begin your response with "# Plan: [Title]". Do not 
     workspaceSummary: string;
     draftMarkdown: string;
     workspaceRoot?: string;
+    model?: string;
   }): Promise<PlanReviewAudit> {
     // If draft is truncated, too short, or lacks required plan title, immediately reject and demand refinement
     const hasPlanTitle = /#*\s*Plan:/i.test(params.draftMarkdown);
@@ -483,9 +487,11 @@ ${params.draftMarkdown}
 Audit this plan with high engineering standards. If the plan is shallow, lacks concrete component interfaces, or lacks runnable test commands, assign score < 90 and demand technical refinement.`;
 
     try {
+      const targetModel = params.model || process.env.GEMINI_MODEL || "3.8 Flash";
       const reviewResponse = await this.client.generate(auditPrompt, {
         systemInstruction: auditorInstruction,
         thinkingBudget: 2048,
+        model: targetModel,
         continueConversation: true,
       });
 
@@ -494,15 +500,20 @@ Audit this plan with high engineering standards. If the plan is shallow, lacks c
       const score = scoreMatch ? Math.min(100, Math.max(0, parseInt(scoreMatch[1], 10))) : 88;
 
       const verdictMatch = raw.match(/# Audit Verdict:\s*(APPROVED|NEEDS_REVISION)/i);
-      const verdict = (verdictMatch && verdictMatch[1].toUpperCase() === "APPROVED" && score >= 90)
-        ? "APPROVED"
-        : "REFINED";
+      const verdict =
+        verdictMatch && verdictMatch[1].toUpperCase() === "APPROVED" && score >= 90
+          ? "APPROVED"
+          : "REFINED";
 
       const critiqueMatch = raw.match(/## Audit Critique\s*([\s\S]*?)(?=(?:## Key Issues Found|$))/i);
-      const critique = critiqueMatch ? critiqueMatch[1].trim() : "Plan analyzed and verified by Gemini Architect.";
+      const critique = critiqueMatch
+        ? critiqueMatch[1].trim()
+        : "Plan analyzed and verified by Gemini Architect.";
 
       const issues: string[] = [];
-      const issuesMatch = raw.match(/## Key Issues Found\s*([\s\S]*?)(?=(?:## Required Refinements|$))/i);
+      const issuesMatch = raw.match(
+        /## Key Issues Found\s*([\s\S]*?)(?=(?:## Required Refinements|$))/i
+      );
       if (issuesMatch) {
         issuesMatch[1].split("\n").forEach((line) => {
           const trimmed = line.replace(/^[-*]\s*/, "").trim();
@@ -544,13 +555,16 @@ Audit this plan with high engineering standards. If the plan is shallow, lacks c
           rawReviewMarkdown: "Validation passed with full compliance.",
         };
       } else {
-        const issues = localCheck.violations.length > 0 ? localCheck.violations : ["Plan requires structural completion"];
+        const issues =
+          localCheck.violations.length > 0 ? localCheck.violations : ["Plan requires structural completion"];
         return {
           score: 60,
           verdict: "REFINED",
           critique: "Plan audit flagged governance violations or incomplete sections that require refinement.",
           identifiedIssues: issues,
-          improvementsApplied: ["Synthesize complete 6-section RULES.MD structure with Non-Goals >= 3 and PERT estimates"],
+          improvementsApplied: [
+            "Synthesize complete 6-section RULES.MD structure with Non-Goals >= 3 and PERT estimates",
+          ],
           rawReviewMarkdown: `# Audit Score: 60\n# Audit Verdict: NEEDS_REVISION\n\n## Key Issues Found\n${issues.map((v) => `- ${v}`).join("\n")}`,
         };
       }

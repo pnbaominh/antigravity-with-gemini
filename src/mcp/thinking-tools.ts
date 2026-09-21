@@ -71,19 +71,20 @@ export function registerThinkingTools(
         const gitStatus = getGitStatus(targetRoot);
         const workspaceSummary = `Project: ${info.name}, Branch: ${info.branch || "unknown"}, Package Manager: ${info.packageManager}, Frameworks: ${info.frameworks.join(", ") || "none"}`;
 
+        const targetModel = model || process.env.GEMINI_MODEL || "3.8 Flash";
         const plan = await planner.createPlan({
           task,
           workspaceSummary,
           gitStatus: gitStatus.summary,
           additionalContext,
           workspaceRoot: targetRoot,
-          model,
+          model: targetModel,
         });
 
         const stored = targetHistory.savePlan({
           task,
           source: "mcp",
-          model: DEFAULT_GEMINI_MODELS.THINKING,
+          model: targetModel,
           title: plan.title,
           summary: plan.summary,
           phases: plan.phases,
@@ -315,12 +316,13 @@ export function registerThinkingTools(
           };
         }
 
+        const targetModel = model || process.env.GEMINI_MODEL || "3.8 Flash";
         const review = await reviewer.reviewDiff({
           gitDiff: diff,
           testStatus,
           taskDescription,
           executionSummary,
-          model,
+          model: targetModel,
         });
 
         return {
@@ -374,9 +376,10 @@ export function registerThinkingTools(
     }) => {
       try {
         const prompt = `${question}\n\n${context ? `Context:\n${context}` : ""}`;
+        const targetModel = model || process.env.GEMINI_MODEL || "3.8 Flash";
         const response = await geminiClient.generate(prompt, {
           thinkingBudget: thinkingBudget || 8192,
-          model,
+          model: targetModel,
         });
 
         return {

@@ -171,5 +171,7 @@ export function createDefaultClient(preferredModel?: string): GeminiGenerationCl
       return apiClient;
     }
   }
-  return new GeminiWebClient({ preferredModel });
+  return new GeminiWebClient({
+    preferredModel: preferredModel || process.env.GEMINI_MODEL || "3.8 Flash",
+  });
 }
