@@ -101,6 +101,20 @@ When Gemini connects via the G2A Bridge, it has access to 9 sandboxed tools:
 
 ---
 
+## 📚 Documentation
+
+Comprehensive technical documentation is available in the [`docs/`](docs/README.md) directory:
+
+- [System Architecture](docs/architecture.md): Dual-engine design, zero-token pointers, security boundaries.
+- [The [G2A] Lifecycle Protocol](docs/protocol.md): State machine, in-thread refinement, JIT phase delivery.
+- [MCP Tools Reference](docs/mcp-tools.md): Complete catalog of all 18 MCP tools with schemas and examples.
+- [RULES.MD Technical Governance](docs/rules-governance.md): 5 Axioms, 6 mandatory sections, PERT math, RAID pre-mortem.
+- [Gemini Web Browser Engine](docs/browser-engine.md): Playwright automation, 3.8 Flash model switching, 4-tier bypass.
+- [Security & Threat Model](docs/security.md): Zero-write guarantees, path confinement, secret masking.
+- [Troubleshooting Guide](docs/troubleshooting.md): Automated diagnostics, browser login, port conflicts, process cleanup.
+
+---
+
 ## 🧪 Testing
 
 Run the full Vitest test suite:
