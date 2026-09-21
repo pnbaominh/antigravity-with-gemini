@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { getAntigravityMcpDirectory } from "../config/paths.js";
 
 export const TOOL_SCHEMAS: Record<string, any> = {
@@ -252,21 +253,71 @@ export const TOOL_SCHEMAS: Record<string, any> = {
   },
 };
 
-export const MCP_INSTRUCTIONS = `Antigravity with Gemini (G2A) MCP Server.
-Gemini acts as the planning and thinking brain, while Antigravity acts as the execution harness.
-CRITICAL MANDATE: Antigravity MUST NEVER formulate plans itself or pollute its own context window. When asked for a plan or when /antigravity-with-gemini is invoked, Antigravity MUST ALWAYS call the MCP tool 'gemini_plan' (or run 'g2a plan').
-All plans strictly adhere to the RULES.MD Technical Governance Framework.
-The system automatically discovers modern Gemini models (> 3.0) and discards legacy models (<= 3.0).
-Use gemini_plan to formulate structured, phased plans. It returns a lightweight zero-token pointer ticket (<50 tokens) and writes the full plan to disk.
-Use gemini_get_phase(phaseIndex) to fetch tasks JIT on-demand when starting each phase to protect Antigravity's context window.
-Use gemini_active_plan to inspect the active plan's progress and file artifact on disk.
-Use gemini_validate_plan to verify plan compliance against RULES.MD axioms (Non-Goals >= 3, AS-IS Grounding, Single DRI, PERT math).
-Use gemini_calculate_pert to compute statistical estimates (E and Sigma).
-Use gemini_list_models to inspect active modern models (> 3.0) and cooldown states.
-Use gemini_refresh_models to trigger live discovery of new models from Google API.
-Use gemini_review to perform independent adversarial code reviews on git diffs.
-Use gemini_think to reason about architectural dilemmas, complex bugs, or tradeoffs.
-Use workspace inspection tools (workspace_info, list_directory, read_file, search_workspace, git_status, git_diff) for safe, read-only context retrieval.`;
+export const MCP_INSTRUCTIONS = `# Antigravity with Gemini (G2A) - MCP Operating Instructions
+
+## Core Mandate: "Gemini Thinks. Antigravity Works."
+Antigravity MUST NOT formulate ad-hoc implementation plans or conduct superficial self-reviews on complex engineering tasks. Whenever planning, architectural decisions, deep reasoning, or code reviews are required, Antigravity MUST leverage the specialized thinking tools provided by the \`antigravity-with-gemini\` MCP server.
+
+---
+
+## 1. Golden Rules of Operation
+
+1. **Zero Context Bloat (Zero-Token Pointer Pattern)**:
+   - When calling \`gemini_plan\`, the default \`returnMode\` is \`"pointer"\`.
+   - The returned pointer ticket is extremely compact (< 50 tokens), containing only the plan ID, audit score, file artifact path, and high-level phase list.
+   - The full, detailed plan specification is safely written to disk at \`.g2a/plans/{plan-id}.md\`.
+   - NEVER request \`returnMode: "full"\` unless explicitly asked by the user, as this floods your context window with hundreds of lines of specification.
+
+2. **Just-In-Time (JIT) Phase Delivery**:
+   - Execute the plan phase-by-phase.
+   - At the start of Phase 1, call \`gemini_get_phase(phaseIndex=1)\` to retrieve atomic tasks (\`[NEW]\`, \`[MODIFY]\`, \`[DELETE]\`), file paths, and the exact runnable shell verification command.
+   - Execute the tasks, run the verification command, and verify that it passes.
+   - Once Phase 1 is verified, call \`gemini_get_phase(phaseIndex=2)\`. This JIT approach guarantees zero context pollution.
+
+3. **Modern Model Default (\`3.8 Flash\`)**:
+   - The system automatically selects Google's newest reasoning model (\`3.8 Flash\`) as the default.
+   - Legacy models (<= 3.0) are discarded by the Dynamic Model Registry.
+   - If a specific model is needed, pass \`model: "3.8 Flash"\`, \`"3.1 Pro"\`, or \`"3.5 Flash-Lite"\`.
+
+4. **Adversarial Code & Security Review**:
+   - Upon completing implementation phases, do NOT declare completion without verification.
+   - Call \`gemini_review({ taskDescription: "..." })\` to conduct an adversarial audit of the working copy git diff and test logs.
+   - Address any \`CRITICAL\` or \`WARNING\` findings before finalizing.
+
+5. **RULES.MD Technical Governance Invariants**:
+   - All generated plans strictly adhere to the 6-section structure of \`RULES.md\`:
+     1. AS-IS State & System Architecture Blueprint (Mermaid diagram + TypeScript interfaces)
+     2. Non-Goals & Scope Boundaries (Mandatory >= 3)
+     3. Unknowns & Halt Checks (Status: CLEAR or HALT)
+     4. Risk Assessment & RAID Log (Mandatory >= 4 entries)
+     5. Work Breakdown Structure (WBS) with atomic tags, single DRI, and PERT 3-point estimates: E = (O + 4M + P) / 6
+     6. Definition of Done & Quality Gates (100% test pass, 0 type errors, clean build)
+
+---
+
+## 2. MCP Tools Quick Reference
+
+### Planning & Reasoning
+- \`gemini_plan\`: Generate a hardened architectural plan. Arguments: \`task\` (required), \`returnMode\` (\`"pointer"\`, \`"compact"\`, \`"full"\`), \`model\` (default \`"3.8 Flash"\`).
+- \`gemini_get_phase\`: Fetch tasks and verification command for a single phase. Arguments: \`phaseIndex\` (required, 1-indexed).
+- \`gemini_active_plan\`: Retrieve the current active plan ticket or progress summary.
+- \`gemini_validate_plan\`: Programmatically validate a plan against the 5 RULES.MD axioms.
+- \`gemini_calculate_pert\`: Calculate statistical PERT expected duration (E) and variance (Sigma).
+- \`gemini_review\`: Perform adversarial code review on current git diff. Arguments: \`taskDescription\` (required), \`file\` (optional).
+- \`gemini_think\`: Engage Gemini Deep Thinking for complex bugs or architectural tradeoffs. Arguments: \`question\` (required), \`context\` (optional), \`thinkingBudget\` (default 8,192).
+- \`gemini_list_models\`: View active modern models and cooldown status.
+- \`gemini_refresh_models\`: Trigger live discovery of new models from Google API.
+
+### Safe Workspace Inspection
+- \`workspace_info\`: Inspect package manager, frameworks, and active git branch.
+- \`list_directory\`: Traverse directories respecting \`.gitignore\` and \`.g2aignore\`.
+- \`read_file\`: Read line slices securely (path traversal and credentials strictly blocked).
+- \`search_workspace\`: Sub-millisecond regex code search across the workspace.
+- \`git_status\`: Get porcelain git status.
+- \`git_diff\`: Inspect working copy or staged diffs.
+- \`test_status\`: View outcome and failure logs of recent automated tests.
+- \`execution_summary\`: High-level summary of Antigravity's active execution.
+- \`execution_output\`: Stdout and stderr logs of recent command executions.`;
 
 export function writeAntigravityMcpSchemas(targetDir?: string): string[] {
   const dir = targetDir || path.join(getAntigravityMcpDirectory(), "antigravity-with-gemini");
@@ -283,6 +334,25 @@ export function writeAntigravityMcpSchemas(targetDir?: string): string[] {
   const instructionsPath = path.join(dir, "instructions.md");
   fs.writeFileSync(instructionsPath, MCP_INSTRUCTIONS, "utf-8");
   writtenFiles.push(instructionsPath);
+
+  // Copy complete docs suite into mcp directory if present
+  try {
+    const docsSource = path.resolve(fileURLToPath(new URL("../../docs", import.meta.url)));
+    if (fs.existsSync(docsSource)) {
+      const docsTarget = path.join(dir, "docs");
+      fs.mkdirSync(docsTarget, { recursive: true });
+      const entries = fs.readdirSync(docsSource);
+      for (const entry of entries) {
+        const srcFile = path.join(docsSource, entry);
+        const stat = fs.statSync(srcFile);
+        if (stat.isFile()) {
+          const destFile = path.join(docsTarget, entry);
+          fs.copyFileSync(srcFile, destFile);
+          writtenFiles.push(destFile);
+        }
+      }
+    }
+  } catch {}
 
   return writtenFiles;
 }

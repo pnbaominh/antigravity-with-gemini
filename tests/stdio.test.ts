@@ -24,7 +24,7 @@ describe("MCP Schemas and Stdio Transport", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "g2a-schemas-test-"));
     try {
       const written = writeAntigravityMcpSchemas(tempDir);
-      expect(written.length).toBe(19); // 18 tools + instructions.md
+      expect(written.length).toBeGreaterThanOrEqual(19); // 18 tools + instructions.md (+ docs)
       expect(fs.existsSync(path.join(tempDir, "gemini_plan.json"))).toBe(true);
       expect(fs.existsSync(path.join(tempDir, "gemini_validate_plan.json"))).toBe(true);
       expect(fs.existsSync(path.join(tempDir, "gemini_calculate_pert.json"))).toBe(true);

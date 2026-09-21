@@ -10,6 +10,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "postbuild": "node ./scripts/sync-mcp.js",
+    "sync-mcp": "node ./scripts/sync-mcp.js",
     "watch": "tsc -w -p tsconfig.json",
     "start": "node ./dist/cli/index.js",
     "test": "vitest run",
