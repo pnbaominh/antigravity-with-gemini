@@ -71,6 +71,55 @@ export class WorkspaceManager {
       }
     }
 
+    // Python detection
+    const reqPath = path.join(this.root, "requirements.txt");
+    const pyprojectPath = path.join(this.root, "pyproject.toml");
+    const pipfilePath = path.join(this.root, "Pipfile");
+    const poetryLock = path.join(this.root, "poetry.lock");
+
+    if (fs.existsSync(poetryLock)) {
+      packageManager = "poetry";
+      if (!frameworks.includes("python")) frameworks.push("python");
+    } else if (fs.existsSync(pipfilePath)) {
+      packageManager = "pipenv";
+      if (!frameworks.includes("python")) frameworks.push("python");
+    } else if (fs.existsSync(reqPath) || fs.existsSync(pyprojectPath)) {
+      if (packageManager === "unknown") packageManager = "pip";
+      if (!frameworks.includes("python")) frameworks.push("python");
+    }
+
+    if (fs.existsSync(reqPath)) {
+      try {
+        const reqContent = fs.readFileSync(reqPath, "utf-8").toLowerCase();
+        if (reqContent.includes("fastapi") && !frameworks.includes("fastapi")) frameworks.push("fastapi");
+        if (reqContent.includes("flask") && !frameworks.includes("flask")) frameworks.push("flask");
+        if (reqContent.includes("django") && !frameworks.includes("django")) frameworks.push("django");
+        if (reqContent.includes("customtkinter") && !frameworks.includes("customtkinter")) frameworks.push("customtkinter");
+        if (reqContent.includes("tkinter") && !frameworks.includes("tkinter")) frameworks.push("tkinter");
+        if (reqContent.includes("pytest") && !frameworks.includes("pytest")) frameworks.push("pytest");
+      } catch {}
+    }
+
+    if (fs.existsSync(path.join(this.root, "Cargo.toml"))) {
+      if (packageManager === "unknown") packageManager = "cargo";
+      if (!frameworks.includes("rust")) frameworks.push("rust");
+    }
+
+    if (fs.existsSync(path.join(this.root, "go.mod"))) {
+      if (packageManager === "unknown") packageManager = "go";
+      if (!frameworks.includes("golang")) frameworks.push("golang");
+    }
+
+    if (packageManager === "unknown" && frameworks.length === 0) {
+      try {
+        const rootEntries = fs.readdirSync(this.root);
+        if (rootEntries.some((f) => f.endsWith(".py"))) {
+          packageManager = "pip";
+          frameworks.push("python");
+        }
+      } catch {}
+    }
+
     return {
       name,
       root: this.root,

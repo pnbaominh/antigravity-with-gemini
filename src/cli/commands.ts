@@ -184,10 +184,17 @@ export async function loginWebCommand(workspaceRoot: string) {
   }
 }
 
-export async function planCommand(workspaceRoot: string, task: string, options?: { model?: string }) {
+export async function planCommand(
+  workspaceRoot: string,
+  task: string,
+  options?: { model?: string; continue?: boolean }
+) {
   console.log(pc.bold(`\n🧠 Asking Gemini Thinking to plan for: "${task}"...`));
   if (options?.model) {
     console.log(pc.cyan(`Using requested model: ${options.model}`));
+  }
+  if (options?.continue) {
+    console.log(pc.green(`Continuing in active Gemini Web conversation thread...`));
   }
   console.log();
   const client = createDefaultClient(options?.model);
@@ -205,6 +212,7 @@ export async function planCommand(workspaceRoot: string, task: string, options?:
       gitStatus: gitStatus.summary,
       workspaceRoot,
       model: options?.model,
+      continueConversation: options?.continue,
     });
 
     const historyStore = new PlanHistoryStore(workspaceRoot);

@@ -130,6 +130,10 @@ export const TOOL_SCHEMAS: Record<string, any> = {
           type: "string",
           description: "Gemini model to use in Gemini Web (e.g. '3.8 Flash', '3.1 Pro', or '3.5 Flash-Lite'). Defaults to newest '3.8 Flash'.",
         },
+        continueConversation: {
+          type: "boolean",
+          description: "If true, continue in active Gemini Web conversation thread without creating a new chat session",
+        },
         returnMode: {
           type: "string",
           enum: ["pointer", "compact", "full"],

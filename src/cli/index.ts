@@ -89,6 +89,7 @@ program
   .command("plan <task>")
   .description("Ask Gemini Thinking to plan an actionable roadmap for a task")
   .option("-m, --model <model>", "Model to use on Gemini Web: '3.1 Pro', '3.8 Flash', or '3.5 Flash-Lite'")
+  .option("-c, --continue", "Continue in the active Gemini Web conversation thread without creating a new chat")
   .action(async (task, options) => {
     const ws = path.resolve(program.opts().workspace);
     await planCommand(ws, task, options);

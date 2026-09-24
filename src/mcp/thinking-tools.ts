@@ -42,6 +42,10 @@ export function registerThinkingTools(
         .string()
         .optional()
         .describe("Gemini model to use (default: '3.8 Flash', or '3.1 Pro', '3.5 Flash-Lite')"),
+      continueConversation: z
+        .boolean()
+        .optional()
+        .describe("If true, continue in active Gemini Web conversation thread without creating a new chat session"),
       compact: z
         .boolean()
         .optional()
@@ -54,6 +58,7 @@ export function registerThinkingTools(
       returnMode,
       compact,
       model,
+      continueConversation,
     }: {
       task: string;
       workspacePath?: string;
@@ -61,6 +66,7 @@ export function registerThinkingTools(
       returnMode?: "pointer" | "compact" | "full";
       compact?: boolean;
       model?: string;
+      continueConversation?: boolean;
     }) => {
       try {
         const targetRoot = workspacePath ? path.resolve(workspacePath) : workspaceRoot;
@@ -79,6 +85,7 @@ export function registerThinkingTools(
           additionalContext,
           workspaceRoot: targetRoot,
           model: targetModel,
+          continueConversation,
         });
 
         const stored = targetHistory.savePlan({
