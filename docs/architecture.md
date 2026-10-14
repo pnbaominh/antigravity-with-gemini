@@ -15,12 +15,12 @@ In traditional AI coding workflows, a single LLM is burdened with reading thousa
 **Antigravity with Gemini (G2A)** resolves this by enforcing a strict separation of concerns:
 - **Google Gemini (Thinking Brain)**: Possesses a 1M–2M context window and dedicated Deep Thinking reasoning budgets (up to 8,192 tokens). Gemini inspects workspace metadata, formulates hardened technical blueprints adhering to the `RULES.MD` Technical Governance Framework, and conducts adversarial code reviews.
 - **Antigravity Harness (Execution Body)**: Owns local disk writes, AST code refactoring, terminal shell execution, automated test runs, and git workflows.
-- **G2A Model Context Protocol (MCP) Bridge**: The secure communication bus exposing 18 specialized tools between Gemini and Antigravity.
+- **G2A Model Context Protocol (MCP) Bridge**: The secure communication bus exposing 19 specialized tools between Gemini and Antigravity.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │                             GOOGLE GEMINI THINKING                               │
-│              Gemini Web (3.8 Flash / 3.1 Pro)  OR  Google GenAI SDK               │
+│              Gemini Web (4 Argon / 3.8 Flash)  OR  Google GenAI SDK              │
 │                                                                                  │
 │   • Deep Thinking Reasoning (up to 8,192 tokens)                                 │
 │   • 1M - 2M Massive Working Memory                                               │
@@ -37,7 +37,7 @@ In traditional AI coding workflows, a single LLM is burdened with reading thousa
 │  ┌───────────────────────────────┐     ┌──────────────────────────────────────┐  │
 │  │   Gemini Web Client Engine    │     │      Dynamic Model Registry          │  │
 │  │  • Playwright Persistent Ctx  │     │  • Auto-detect modern models (> 3.0) │  │
-│  │  • Profile: ~/.g2a/browser    │     │  • Prioritize 3.8 Flash > 3.1 Pro    │  │
+│  │  • Profile: ~/.g2a/browser    │     │  • Prioritize 4 Argon > 3.8 Flash    │  │
 │  │  • Material Overlay Selector  │     │  • Quota-aware cooldown management   │  │
 │  │  • 4-Tier Autonomous Bypass   │     │  • Legacy model discard (<= 3.0)     │  │
 │  └───────────────────────────────┘     └──────────────────────────────────────┘  │
@@ -51,7 +51,7 @@ In traditional AI coding workflows, a single LLM is burdened with reading thousa
 │  └───────────────────────────────┘     └──────────────────────────────────────┘  │
 │                                                                                  │
 │  ┌───────────────────────────────┐     ┌──────────────────────────────────────┐  │
-│  │    9 Workspace Read Tools     │     │      9 Thinking & Governance Tools   │  │
+│  │    9 Workspace Read Tools     │     │     10 Thinking & Governance Tools   │  │
 │  │  • workspace_info             │     │  • gemini_plan                       │  │
 │  │  • list_directory             │     │  • gemini_get_phase (JIT)            │  │
 │  │  • read_file (slice-safe)     │     │  • gemini_active_plan                │  │
@@ -61,6 +61,7 @@ In traditional AI coding workflows, a single LLM is burdened with reading thousa
 │  │  • test_status                │     │  • gemini_calculate_pert             │  │
 │  │  • execution_summary          │     │  • gemini_list_models                │  │
 │  │  • execution_output           │     │  • gemini_refresh_models             │  │
+│  │                               │     │  • gemini_agency_questions           │  │
 │  └───────────────────────────────┘     └──────────────────────────────────────┘  │
 └────────────────────────────────────────┬─────────────────────────────────────────┘
                                          │
@@ -137,9 +138,9 @@ To prevent Antigravity's context window from being flooded by large 500-line arc
 
 ---
 
-## 4. The 18 MCP Tools Catalog
+## 4. The 19 MCP Tools Catalog
 
-The MCP server exposes 18 specialized tools organized into two distinct groups:
+The MCP server exposes 19 specialized tools organized into two distinct groups:
 
 ### Group A: Workspace Data Plane (9 Safe Read-Only Tools)
 | Tool | Functionality | Safety Guarantee |
@@ -154,7 +155,7 @@ The MCP server exposes 18 specialized tools organized into two distinct groups:
 | `execution_summary`| High-level summary of Antigravity's active execution | Read-only |
 | `execution_output` | Detailed stdout, stderr, and exit codes of recent runs | Read-only |
 
-### Group B: Thinking, Planning & Governance (9 Tools)
+### Group B: Thinking, Planning & Governance (10 Tools)
 | Tool | Functionality | Primary Engine |
 |---|---|---|
 | `gemini_plan` | Generates a 6-section RULES.MD plan with pointer ticket | Gemini Web / API |
@@ -166,6 +167,7 @@ The MCP server exposes 18 specialized tools organized into two distinct groups:
 | `gemini_calculate_pert`| Calculates 3-point PERT expected duration and standard deviation | Local Rules Engine |
 | `gemini_list_models` | Lists modern models (> 3.0), active default, and cooldowns | Dynamic Registry |
 | `gemini_refresh_models`| Triggers live discovery of latest models from Google API | Dynamic Registry |
+| `gemini_agency_questions`| Formulates structured discovery questions (Agency-Agents pattern) | Discovery Engine |
 
 ---
 

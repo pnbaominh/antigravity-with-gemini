@@ -1,6 +1,6 @@
 # MCP Tools Reference: Antigravity with Gemini (G2A)
 
-This document provides a comprehensive reference for all **18 Model Context Protocol (MCP) tools** exposed by the G2A server.
+This document provides a comprehensive reference for all **19 Model Context Protocol (MCP) tools** exposed by the G2A server.
 
 ---
 
@@ -161,7 +161,7 @@ These 9 tools empower Antigravity to harness Gemini's Deep Thinking models for a
 - **Parameters**:
   - `taskDescription` (required, string): Description of what the change was intended to accomplish.
   - `file` (optional, string): Restrict review to a specific file.
-  - `model` (optional, string): Gemini model to use (default: `"3.8 Flash"`).
+  - `model` (optional, string): Gemini model to use (default: `"4 Argon"`).
   - `workspacePath` (optional, string): Target workspace root.
 - **Returns**: Structured review with `# Code Review Verdict: [APPROVED | CHANGES_REQUESTED]`, critique, and actionable findings (`CRITICAL`, `WARNING`, `SUGGESTION`).
 
@@ -173,7 +173,7 @@ These 9 tools empower Antigravity to harness Gemini's Deep Thinking models for a
   - `question` (required, string): The technical question, bug symptom, or tradeoff.
   - `context` (optional, string): Relevant stack traces, logs, or code snippets.
   - `thinkingBudget` (optional, number): Reasoning token budget (default: 8,192 tokens).
-  - `model` (optional, string): Gemini model to use (default: `"3.8 Flash"`).
+  - `model` (optional, string): Gemini model to use (default: `"4 Argon"`).
 
 ---
 
@@ -198,7 +198,7 @@ These 9 tools empower Antigravity to harness Gemini's Deep Thinking models for a
 ---
 
 ### 2.8 `gemini_list_models`
-- **Description**: Lists all modern Gemini models (> 3.0) registered in the Dynamic Model Registry, including active default (`3.8 Flash`), capabilities, and rate-limit cooldown status.
+- **Description**: Lists all modern Gemini models (> 3.0) registered in the Dynamic Model Registry, including active default (`4 Argon` / `3.8 Flash`), capabilities, and rate-limit cooldown status.
 - **Parameters**: None.
 
 ---
@@ -206,3 +206,15 @@ These 9 tools empower Antigravity to harness Gemini's Deep Thinking models for a
 ### 2.9 `gemini_refresh_models`
 - **Description**: Triggers dynamic model discovery from the Google API to refresh available models and capability flags.
 - **Parameters**: None.
+
+---
+
+### 2.10 `gemini_agency_questions`
+- **Description**: Formulates structured discovery, architectural scoping, and reality-checking questions for a task using the `msitarzewski/agency-agents` methodology (5 Strategic Pillars: Mission, Architecture, Non-Goals, Reality Check, Definition of Done).
+- **Parameters**:
+  - `task` (required, string): The user task, feature request, or problem statement to scope.
+  - `persona` (optional, enum: `"architect"` | `"reality-checker"` | `"product-coach"` | `"security-auditor"`): The agency persona style (default: `"architect"`).
+  - `language` (optional, enum: `"vi"` | `"en"`): Language for the questions.
+  - `model` (optional, string): Gemini model to use (default: `"4 Argon"`).
+  - `workspacePath` (optional, string): Target workspace root.
+- **Returns**: Structured markdown with multiple-choice questions prefixed with `(Recommended)` for fast agentic selection.

@@ -15,6 +15,7 @@ import {
   mcpCommand,
   webCommand,
   modelsCommand,
+  askCommand,
 } from "./commands.js";
 import { runDoctorChecks, printDoctorReport } from "./doctor.js";
 import { BridgeServer } from "../bridge/server.js";
@@ -88,7 +89,7 @@ program
 program
   .command("plan <task>")
   .description("Ask Gemini Thinking to plan an actionable roadmap for a task")
-  .option("-m, --model <model>", "Model to use on Gemini Web: '3.1 Pro', '3.8 Flash', or '3.5 Flash-Lite'")
+  .option("-m, --model <model>", "Model to use on Gemini Web: '4 Argon', '3.8 Flash', '3.1 Pro', or '3.5 Flash-Lite'")
   .option("-c, --continue", "Continue in the active Gemini Web conversation thread without creating a new chat")
   .action(async (task, options) => {
     const ws = path.resolve(program.opts().workspace);
@@ -144,6 +145,18 @@ program
   .option("-r, --refresh", "Force a live discovery refresh from Google GenAI API")
   .action(async (options) => {
     await modelsCommand(options);
+  });
+
+program
+  .command("ask <task>")
+  .alias("discover")
+  .description("Ask structured discovery and scoping questions using the msitarzewski/agency-agents methodology")
+  .option("-p, --persona <persona>", "Agency persona ('architect', 'reality-checker', 'product-coach', 'security-auditor')", "architect")
+  .option("-l, --language <lang>", "Language for questions ('vi' or 'en')")
+  .option("-m, --model <model>", "Model to use on Gemini Web (default: '4 Argon')")
+  .action(async (task, options) => {
+    const ws = path.resolve(program.opts().workspace);
+    await askCommand(ws, task, options);
   });
 
 // Internal command used when spawned as detached daemon

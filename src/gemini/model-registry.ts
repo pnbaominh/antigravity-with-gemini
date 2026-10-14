@@ -21,14 +21,15 @@ export interface ModelCacheData {
 export const MIN_GEMINI_VERSION = 3.1; // Filter out <= 3.0 (2.5, 2.0, 1.5, 3.0-preview)
 
 export const DEFAULT_MODERN_MODELS = {
-  PLANNER: "gemini-3.5-flash",
-  THINKING: "gemini-3.5-flash",
+  PLANNER: "gemini-4.0-argon",
+  THINKING: "gemini-4.0-argon",
   FAST: "gemini-3.5-flash-lite",
   FALLBACK_CHAIN: [
-    "gemini-3.5-flash",
+    "gemini-4.0-argon",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
     "gemini-3.6-flash",
+    "gemini-3.5-flash",
     "gemini-3.1-pro-preview",
     "gemini-3.1-flash-lite",
   ],
@@ -99,7 +100,7 @@ export class DynamicModelRegistry {
       let tier: DiscoveredModel["tier"] = "PLANNER";
       if (cleanId.includes("lite")) {
         tier = "FAST";
-      } else if (cleanId.includes("pro") || cleanId.includes("extended-thinking")) {
+      } else if (cleanId.includes("pro") || cleanId.includes("argon") || cleanId.includes("extended-thinking")) {
         tier = "THINKING";
       } else {
         tier = "PLANNER";
@@ -309,6 +310,7 @@ export class DynamicModelRegistry {
 
   private getDefaultDiscoveredModels(): DiscoveredModel[] {
     return [
+      { id: "gemini-4.0-argon", version: 4.0, tier: "THINKING", displayName: "4 Argon" },
       { id: "gemini-3.8-flash", version: 3.8, tier: "PLANNER" },
       { id: "gemini-3.7-flash", version: 3.7, tier: "PLANNER" },
       { id: "gemini-3.6-flash", version: 3.6, tier: "PLANNER" },

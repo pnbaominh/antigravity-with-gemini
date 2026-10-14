@@ -10,6 +10,7 @@ import { PlanHistoryStore } from "../gemini/history.js";
 import { DEFAULT_GEMINI_MODELS } from "../config/constants.js";
 import { RulesEngine } from "../governance/rules-engine.js";
 import { DynamicModelRegistry } from "../gemini/model-registry.js";
+import { AgencyDiscoveryEngine } from "../gemini/agency-discovery.js";
 
 export function registerThinkingTools(
   server: any,
@@ -20,6 +21,7 @@ export function registerThinkingTools(
   const reviewer = new GeminiReviewer(geminiClient);
   const workspaceManager = new WorkspaceManager(workspaceRoot);
   const historyStore = new PlanHistoryStore(workspaceRoot);
+  const discoveryEngine = new AgencyDiscoveryEngine(geminiClient);
 
   server.tool(
     "gemini_plan",
@@ -41,7 +43,7 @@ export function registerThinkingTools(
       model: z
         .string()
         .optional()
-        .describe("Gemini model to use (default: '3.8 Flash', or '3.1 Pro', '3.5 Flash-Lite')"),
+        .describe("Gemini model to use (default: '4 Argon', or '3.8 Flash', '3.1 Pro', '3.5 Flash-Lite')"),
       continueConversation: z
         .boolean()
         .optional()
@@ -77,7 +79,7 @@ export function registerThinkingTools(
         const gitStatus = getGitStatus(targetRoot);
         const workspaceSummary = `Project: ${info.name}, Branch: ${info.branch || "unknown"}, Package Manager: ${info.packageManager}, Frameworks: ${info.frameworks.join(", ") || "none"}`;
 
-        const targetModel = model || process.env.GEMINI_MODEL || "3.8 Flash";
+        const targetModel = model || process.env.GEMINI_MODEL || "4 Argon";
         const plan = await planner.createPlan({
           task,
           workspaceSummary,
@@ -293,7 +295,7 @@ export function registerThinkingTools(
       model: z
         .string()
         .optional()
-        .describe("Gemini model to use (default: '3.8 Flash', or '3.1 Pro', '3.5 Flash-Lite')"),
+        .describe("Gemini model to use (default: '4 Argon', or '3.8 Flash', '3.1 Pro', '3.5 Flash-Lite')"),
     },
     async ({
       taskDescription,
@@ -323,7 +325,7 @@ export function registerThinkingTools(
           };
         }
 
-        const targetModel = model || process.env.GEMINI_MODEL || "3.8 Flash";
+        const targetModel = model || process.env.GEMINI_MODEL || "4 Argon";
         const review = await reviewer.reviewDiff({
           gitDiff: diff,
           testStatus,
@@ -368,7 +370,7 @@ export function registerThinkingTools(
       model: z
         .string()
         .optional()
-        .describe("Gemini model to use (default: '3.8 Flash', or '3.1 Pro', '3.5 Flash-Lite')"),
+        .describe("Gemini model to use (default: '4 Argon', or '3.8 Flash', '3.1 Pro', '3.5 Flash-Lite')"),
     },
     async ({
       question,
@@ -383,7 +385,7 @@ export function registerThinkingTools(
     }) => {
       try {
         const prompt = `${question}\n\n${context ? `Context:\n${context}` : ""}`;
-        const targetModel = model || process.env.GEMINI_MODEL || "3.8 Flash";
+        const targetModel = model || process.env.GEMINI_MODEL || "4 Argon";
         const response = await geminiClient.generate(prompt, {
           thinkingBudget: thinkingBudget || 8192,
           model: targetModel,
@@ -646,6 +648,77 @@ export function registerThinkingTools(
             {
               type: "text",
               text: `Model discovery refresh failed: ${error?.message || String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "gemini_agency_questions",
+    "Formulate structured discovery, architectural scoping, and reality-checking questions for a task using the msitarzewski/agency-agents methodology.",
+    {
+      task: z.string().describe("The user task, feature request, or problem statement to scope"),
+      persona: z
+        .enum(["architect", "reality-checker", "product-coach", "security-auditor"])
+        .optional()
+        .describe("The Agency-Agents persona style (default: 'architect')"),
+      workspacePath: z
+        .string()
+        .optional()
+        .describe("Target workspace root directory. If omitted, uses current workspace."),
+      language: z
+        .enum(["vi", "en"])
+        .optional()
+        .describe("Language for the discovery questions ('vi' or 'en')"),
+      model: z
+        .string()
+        .optional()
+        .describe("Gemini model to use (default: '4 Argon')"),
+    },
+    async ({
+      task,
+      persona,
+      workspacePath,
+      language,
+      model,
+    }: {
+      task: string;
+      persona?: "architect" | "reality-checker" | "product-coach" | "security-auditor";
+      workspacePath?: string;
+      language?: "vi" | "en";
+      model?: string;
+    }) => {
+      try {
+        const targetRoot = workspacePath ? path.resolve(workspacePath) : workspaceRoot;
+        const targetWorkspace = workspacePath ? new WorkspaceManager(targetRoot) : workspaceManager;
+        const info = targetWorkspace.getInfo();
+        const workspaceSummary = `Project: ${info.name}, Branch: ${info.branch || "unknown"}, Package Manager: ${info.packageManager}, Frameworks: ${info.frameworks.join(", ") || "none"}`;
+
+        const result = await discoveryEngine.discover({
+          task,
+          workspaceSummary,
+          persona,
+          language,
+          model: model || process.env.GEMINI_MODEL || "4 Argon",
+        });
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: result.rawMarkdown,
+            },
+          ],
+        };
+      } catch (error: any) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Agency discovery failed: ${error?.message || String(error)}`,
             },
           ],
         };

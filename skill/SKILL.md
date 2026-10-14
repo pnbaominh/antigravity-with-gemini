@@ -119,7 +119,8 @@ g2a stop            # Stop the bridge daemon
 g2a status          # Check bridge health, port, and tunnel status
 g2a doctor          # Run environment and permission diagnostics (verifies Brave/Edge/Chrome)
 g2a pair            # Generate a new 6-digit one-time pairing code
-g2a plan "<task>"   # Request a deep thinking plan via Gemini Web Engine (Principal Architect)
+g2a ask "<task>"    # Formulate structured discovery questions via Agency-Agents methodology
+g2a plan "<task>"   # Request a deep thinking plan via Gemini 4 Argon / 3.8 Flash Engine (100% 8,192 reasoning capacity)
 g2a web "<task>"    # Copy context & prompt and open Google Gemini Web manually if desired
 g2a review          # Request an adversarial review of current git diff
 g2a tunnel          # Launch a Cloudflare public quick tunnel

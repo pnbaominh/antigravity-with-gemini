@@ -1,6 +1,6 @@
 # Gemini Web Automation Engine: Architecture & Operations
 
-The **Gemini Web Client Engine (`GeminiWebClient`)** is a core component of G2A. It provides fully automated, headless or headed interaction with `gemini.google.com`, allowing Antigravity to utilize Google's newest reasoning models (such as `3.8 Flash` and `3.1 Pro`) using the developer's existing Google account, completely bypassing Google AI Studio API rate limits and quotas.
+The **Gemini Web Client Engine (`GeminiWebClient`)** is a core component of G2A. It provides fully automated, headless or headed interaction with `gemini.google.com`, allowing Antigravity to utilize Google's newest reasoning models (such as `4 Argon`, `3.8 Flash`, and `3.1 Pro`) using the developer's existing Google account, completely bypassing Google AI Studio API rate limits and quotas.
 
 ---
 
@@ -20,7 +20,8 @@ The **Gemini Web Client Engine (`GeminiWebClient`)** is a core component of G2A.
 │  │   Browser Context Manager   │    │     Model Selector Engine     │  │
 │  │  • Chromium auto-discovery  │    │  • Focus input toolbar        │  │
 │  │  • ~/.g2a/browser_profile   │    │  • Angular Material overlay   │  │
-│  │  • Cookie/Session retention │    │  • Selects 3.8 Flash directly │  │
+│  │  • Cookie/Session retention │    │  • Selects 4 Argon directly   │  │
+│  │                             │    │  • Max thinking level (Cao)   │  │
 │  └─────────────────────────────┘    └───────────────────────────────┘  │
 │                                                                        │
 │  ┌─────────────────────────────┐    ┌───────────────────────────────┐  │
@@ -68,7 +69,7 @@ Rather than starting an ephemeral incognito session that requires re-authenticat
 
 ---
 
-## 3. Model Selector Automation: Guaranteeing `3.8 Flash`
+## 3. Model Selector Automation: Guaranteeing `4 Argon` & Maximum Thinking Level
 
 Gemini Web employs an Angular Material UI with dynamic component rendering. G2A implements an infallible multi-step model switching sequence in `ensureBestModel`:
 
@@ -84,18 +85,23 @@ if (await textbox.isVisible().catch(() => false)) {
 
 ### Step 2: Locating the Mode Selector Button
 The button is identified across localization languages (English and Vietnamese):
-- Vietnamese: `button[aria-label*="Mở công cụ chọn chế độ"]` or `button:has-text("Pro Mở rộng")` / `button:has-text("Flash Mở rộng")`.
-- English: `button[aria-label*="Open model picker"]` or `button:has-text("3.8 Flash")` / `button:has-text("3.1 Pro")`.
+- Vietnamese: `button[aria-label*="Mở công cụ chọn chế độ"]` or `button:has-text("4 Argon")` / `button:has-text("Flash Mở rộng")`.
+- English: `button[aria-label*="Open model picker"]` or `button:has-text("4 Argon")` / `button:has-text("3.8 Flash")` / `button:has-text("3.1 Pro")`.
 
 ### Step 3: Direct Menuitem Selection
 When clicked, Angular Material renders a floating menu in the top-level `.cdk-overlay-container`.  
 **Critical DOM Rule**: The parent container `<div class="mat-mdc-menu-content">` contains the text of all models. Clicking a container `div` dismisses the dropdown without selecting a model. G2A targets the exact menu item button directly:
 ```typescript
-const targetItem = page.locator('[role="menuitem"]:has-text("3.8 Flash"), .mat-mdc-menu-item:has-text("3.8 Flash")').first();
+const targetItem = page.locator(
+  '[role="menuitem"]:has-text("4 Argon"), .mat-mdc-menu-item:has-text("4 Argon"), [role="menuitem"]:has-text("Argon")'
+).first();
 if (await targetItem.isVisible({ timeout: 3000 })) {
   await targetItem.click({ force: true });
 }
 ```
+
+### Step 4: Thinking Level Automation (`ensureThinkingLevelMax`)
+Gemini 4.0 Argon features configurable reasoning depth. G2A hovers/clicks the `"Cấp độ tư duy ▶"` ("Thinking level") submenu and selects `"Cao"` / `"High"` / `"Tối đa"` to guarantee 100% reasoning budget (8,192 tokens) before closing the menu with `Escape`.
 
 ---
 
@@ -106,7 +112,7 @@ When formulating complex implementation plans, a draft plan may require refineme
 Creating a new chat session destroys Gemini's thinking memory, requiring the entire workspace context to be re-uploaded. G2A solves this with **In-Thread Continuity**:
 1. **Turn 1 (`continueConversation: false`)**:
    - Opens a fresh chat session.
-   - Ensures `3.8 Flash` is active.
+   - Ensures `4 Argon` is active with maximum thinking level.
    - Submits the initial plan prompt.
 2. **Turn 2 (`continueConversation: true`)**:
    - **No navigation**: Does NOT call `page.goto()` or reload.
@@ -134,7 +140,7 @@ If Gemini Web flags a prompt or returns an incomplete response, G2A activates it
 
 | Tier | Strategy | Description |
 |---|---|---|
-| **Tier 1** | **Natural Directive Framing** | Strips strict constraint markers and reframes as a Principal Architect system document. |
+| **Tier 1** | **Natural Directive Framing** | Strips strict constraint markers and reframes as an authorized Principal Architect RFC system document. |
 | **Tier 2** | **Structural Data-Contract Inversion** | Converts operational action verbs into an objective Software Architecture & Type Contract Specification. |
-| **Tier 3** | **Alternate Model Switching (3.1 Pro)** | Switches model to `3.1 Pro` in case `3.8 Flash` encountered a localized safety refusal. |
+| **Tier 3** | **Alternate Model Fallback (3.8 Flash / 3.1 Pro)** | Rotates model from `4 Argon` to `3.8 Flash` or `3.1 Pro` in case of localized filter refusals. |
 | **Tier 4** | **Fast Fallback (3.5 Flash-Lite)** | High-speed fallback to `3.5 Flash-Lite` to ensure continuous execution. |

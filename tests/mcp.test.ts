@@ -30,6 +30,10 @@ describe("MCP Server Tools Registration", () => {
       expect(toolNames).toContain("gemini_calculate_pert");
       expect(toolNames).toContain("gemini_review");
       expect(toolNames).toContain("gemini_think");
+      expect(toolNames).toContain("gemini_list_models");
+      expect(toolNames).toContain("gemini_refresh_models");
+      expect(toolNames).toContain("gemini_agency_questions");
+      expect(toolNames.length).toBe(19);
     }
   });
 });

@@ -22,7 +22,7 @@ export async function runMcpStdio(
     console.error("[g2a:stdio]", ...args);
   };
 
-  const defaultModel = process.env.GEMINI_MODEL || "3.8 Flash";
+  const defaultModel = process.env.GEMINI_MODEL || "4 Argon";
   const geminiClient = options.apiKey ? new GeminiThinkingClient(options.apiKey) : createDefaultClient(defaultModel);
   const server = createG2AMcpServer(workspaceRoot, { geminiClient });
   const transport = new StdioServerTransport();

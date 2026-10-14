@@ -346,12 +346,12 @@ Format requirement: Directly begin your response with "# Plan: [Title]". Do not 
 
     const systemInstruction = `Role: Principal Software Architect. Purpose: "Gemini Thinks. Antigravity Works." Operating under RULES.MD technical governance. Output pure technical Markdown plan starting with "# Plan:".`;
 
-    const targetModel = params.model || process.env.GEMINI_MODEL || "3.8 Flash";
+    const targetModel = params.model || process.env.GEMINI_MODEL || "4 Argon";
 
     // 1. Generate initial draft plan (Turn 1: starts fresh chat session unless continueConversation is requested)
     const draftResponse = await this.client.generate(prompt, {
       systemInstruction,
-      thinkingBudget: 4096,
+      thinkingBudget: 8192,
       model: targetModel,
       continueConversation: params.continueConversation ?? false,
     });
@@ -487,10 +487,10 @@ ${params.draftMarkdown}
 Audit this plan with high engineering standards. If the plan is shallow, lacks concrete component interfaces, or lacks runnable test commands, assign score < 90 and demand technical refinement.`;
 
     try {
-      const targetModel = params.model || process.env.GEMINI_MODEL || "3.8 Flash";
+      const targetModel = params.model || process.env.GEMINI_MODEL || "4 Argon";
       const reviewResponse = await this.client.generate(auditPrompt, {
         systemInstruction: auditorInstruction,
-        thinkingBudget: 2048,
+        thinkingBudget: 8192,
         model: targetModel,
         continueConversation: true,
       });
@@ -625,7 +625,7 @@ Thank you.`;
     try {
       const refinedResponse = await this.client.generate(refinePrompt, {
         systemInstruction: params.systemInstruction,
-        thinkingBudget: 4096,
+        thinkingBudget: 8192,
         model: params.model,
         continueConversation: true,
       });

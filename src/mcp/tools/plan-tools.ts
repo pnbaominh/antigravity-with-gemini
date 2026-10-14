@@ -19,7 +19,7 @@ export class PlanToolsHandler {
   ): Promise<{ content: { type: 'text'; text: string }[] }> {
     const input = CreatePlanSchema.parse(args);
 
-    // Out-of-band reasoning runs via Gemini 3.6 Flash - consumes 0 tokens in Antigravity context
+    // Out-of-band reasoning runs via Gemini 4.0 Argon - consumes 0 tokens in Antigravity context
     const planId = await this.planner.generatePlanOOB(input.user_prompt, input.context_rules);
     const spec = await this.artifactStore.readPlan(planId);
 

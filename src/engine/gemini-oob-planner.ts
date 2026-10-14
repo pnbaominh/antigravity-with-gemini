@@ -58,7 +58,7 @@ ${contextRules || 'Standard MCP + Dual-Token Boundary with Zero Antigravity Cont
 
     const response = await this.client.generate(userContent, {
       systemInstruction,
-      thinkingBudget: 4096,
+      thinkingBudget: 8192,
       temperature: 0.2,
     });
 
@@ -108,7 +108,7 @@ ${contextRules || 'Standard MCP + Dual-Token Boundary with Zero Antigravity Cont
       plan_id: planId,
       title: parsed.title || 'Untitled Architecture Plan',
       created_at: new Date().toISOString(),
-      model_used: response.model || 'gemini-3.6-flash',
+      model_used: response.model || 'gemini-3.8-flash',
       architecture_summary: parsed.architecture_summary || 'Out-of-band planned architecture.',
       phases,
       deep_traps: Array.isArray(parsed.deep_traps) ? parsed.deep_traps : [],

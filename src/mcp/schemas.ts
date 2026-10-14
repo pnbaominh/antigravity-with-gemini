@@ -128,7 +128,7 @@ export const TOOL_SCHEMAS: Record<string, any> = {
         additionalContext: { type: "string", description: "Additional architectural guidelines, technical constraints, or preferences" },
         model: {
           type: "string",
-          description: "Gemini model to use in Gemini Web (e.g. '3.8 Flash', '3.1 Pro', or '3.5 Flash-Lite'). Defaults to newest '3.8 Flash'.",
+          description: "Gemini model to use in Gemini Web (e.g. '4 Argon', '3.8 Flash', '3.1 Pro', or '3.5 Flash-Lite'). Defaults to newest '4 Argon'.",
         },
         continueConversation: {
           type: "boolean",
@@ -185,7 +185,7 @@ export const TOOL_SCHEMAS: Record<string, any> = {
         workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
         model: {
           type: "string",
-          description: "Gemini model to use (default: '3.8 Flash', or '3.1 Pro', '3.5 Flash-Lite')",
+          description: "Gemini model to use (default: '4 Argon', or '3.8 Flash', '3.1 Pro', '3.5 Flash-Lite')",
         },
       },
       required: ["taskDescription"],
@@ -203,7 +203,7 @@ export const TOOL_SCHEMAS: Record<string, any> = {
         thinkingBudget: { type: "integer", description: "Reasoning token budget (default 8192)" },
         model: {
           type: "string",
-          description: "Gemini model to use (default: '3.8 Flash', or '3.1 Pro', '3.5 Flash-Lite')",
+          description: "Gemini model to use (default: '4 Argon', or '3.8 Flash', '3.1 Pro', '3.5 Flash-Lite')",
         },
       },
       required: ["question"],
@@ -255,6 +255,26 @@ export const TOOL_SCHEMAS: Record<string, any> = {
       additionalProperties: false,
     },
   },
+  gemini_agency_questions: {
+    name: "gemini_agency_questions",
+    description: "Formulate structured discovery, architectural scoping, and reality-checking questions for a task using the msitarzewski/agency-agents methodology.",
+    parameters: {
+      type: "object",
+      properties: {
+        task: { type: "string", description: "The user task, feature request, or problem statement to scope" },
+        persona: {
+          type: "string",
+          enum: ["architect", "reality-checker", "product-coach", "security-auditor"],
+          description: "The Agency-Agents persona style (default: 'architect')",
+        },
+        workspacePath: { type: "string", description: "Target workspace root directory. If omitted, uses current workspace." },
+        language: { type: "string", enum: ["vi", "en"], description: "Language for the discovery questions ('vi' or 'en')" },
+        model: { type: "string", description: "Gemini model to use (default: '4 Argon')" },
+      },
+      required: ["task"],
+      additionalProperties: false,
+    },
+  },
 };
 
 export const MCP_INSTRUCTIONS = `# Antigravity with Gemini (G2A) - MCP Operating Instructions
@@ -278,10 +298,10 @@ Antigravity MUST NOT formulate ad-hoc implementation plans or conduct superficia
    - Execute the tasks, run the verification command, and verify that it passes.
    - Once Phase 1 is verified, call \`gemini_get_phase(phaseIndex=2)\`. This JIT approach guarantees zero context pollution.
 
-3. **Modern Model Default (\`3.8 Flash\`)**:
-   - The system automatically selects Google's newest reasoning model (\`3.8 Flash\`) as the default.
+3. **Modern Model Default (\`4 Argon\` / \`3.8 Flash\`)**:
+   - The system automatically selects Google's newest reasoning models (\`4 Argon\` for complex tasks, or \`3.8 Flash\`) as the default.
    - Legacy models (<= 3.0) are discarded by the Dynamic Model Registry.
-   - If a specific model is needed, pass \`model: "3.8 Flash"\`, \`"3.1 Pro"\`, or \`"3.5 Flash-Lite"\`.
+   - If a specific model is needed, pass \`model: "4 Argon"\`, \`"3.8 Flash"\`, \`"3.1 Pro"\`, or \`"3.5 Flash-Lite"\`.
 
 4. **Adversarial Code & Security Review**:
    - Upon completing implementation phases, do NOT declare completion without verification.
@@ -302,7 +322,8 @@ Antigravity MUST NOT formulate ad-hoc implementation plans or conduct superficia
 ## 2. MCP Tools Quick Reference
 
 ### Planning & Reasoning
-- \`gemini_plan\`: Generate a hardened architectural plan. Arguments: \`task\` (required), \`returnMode\` (\`"pointer"\`, \`"compact"\`, \`"full"\`), \`model\` (default \`"3.8 Flash"\`).
+- \`gemini_plan\`: Generate a hardened architectural plan. Arguments: \`task\` (required), \`returnMode\` (\`"pointer"\`, \`"compact"\`, \`"full"\`), \`model\` (default \`"4 Argon"\`).
+- \`gemini_agency_questions\`: Formulate structured discovery and scoping questions using msitarzewski/agency-agents framework.
 - \`gemini_get_phase\`: Fetch tasks and verification command for a single phase. Arguments: \`phaseIndex\` (required, 1-indexed).
 - \`gemini_active_plan\`: Retrieve the current active plan ticket or progress summary.
 - \`gemini_validate_plan\`: Programmatically validate a plan against the 5 RULES.MD axioms.

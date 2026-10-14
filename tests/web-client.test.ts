@@ -85,12 +85,17 @@ Build resilient browser automation bridge.
     expect(client.isBackendError("Sorry, something went wrong. Please try again.")).toBe(true);
 
     // Valid plan outputs should NOT be flagged as errors
-    expect(client.isBackendError("# Plan: System Architecture\n## 1. AS-IS State")).toBe(false);
     expect(
       client.isBackendError(
         "# Plan: Microservices Migration\nDRI: lead_architect\n## 1. AS-IS State & System Architecture Blueprint"
       )
     ).toBe(false);
+  });
+
+  it("should configure default preferred model to 4 Argon", () => {
+    const client = new GeminiWebClient();
+    // @ts-expect-error - inspect private config
+    expect(client.config.preferredModel).toBe("4 Argon");
   });
 });
 

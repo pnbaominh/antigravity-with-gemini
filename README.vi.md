@@ -55,12 +55,14 @@ node ./bin/g2a.js status
 | Lệnh | Ý nghĩa |
 |---|---|
 | `g2a setup` | Cài đặt skill, chạy chẩn đoán và tạo mã pairing ban đầu |
+| `g2a login-web` | Khởi động trình duyệt đăng nhập Google Gemini Web (gemini.google.com) và lưu phiên vĩnh viễn |
 | `g2a start` | Khởi động bridge ngầm (thêm `-f` để chạy trực tiếp) |
 | `g2a stop` | Dừng bridge đang chạy |
 | `g2a status` | Xem trạng thái PID, cổng mạng, URL SSE và tunnel |
 | `g2a doctor` | Kiểm tra môi trường (Node >= 20, Git, Cloudflared) |
 | `g2a pair` | Tạo mã pairing 6 chữ số mới |
-| `g2a plan "<task>"` | Nhờ Gemini Thinking (chế độ Principal Architect) lên blueprint kiến trúc và kế hoạch thi công chi tiết |
+| `g2a ask "<task>"` | Đặt câu hỏi khảo sát cấu trúc dự án & ranh giới theo chuẩn Agency-Agents |
+| `g2a plan "<task>"` | Nhờ Gemini Thinking (`4 Argon` / `3.8 Flash`) lên blueprint kiến trúc và kế hoạch thi công chi tiết |
 | `g2a web "<task>"` | Tự động copy ngữ cảnh workspace & prompt chuẩn Architect vào Clipboard và mở giao diện chat web Google Gemini (gemini.google.com) |
 | `g2a review` | Nhờ Gemini review độc lập git diff và kết quả test |
 | `g2a tunnel` | Bật Cloudflare Quick Tunnel để kết nối từ xa |
@@ -85,9 +87,9 @@ Hệ thống tài liệu kiến trúc và hướng dẫn vận hành chi tiết 
 
 - [Kiến Trúc Hệ Thống (System Architecture)](docs/architecture.md): Thiết kế Dual-Engine, cơ chế Zero-Token Pointer, ranh giới an toàn.
 - [Giao Thức Vận Hành [G2A] (Lifecycle Protocol)](docs/protocol.md): Máy trạng thái, khảo sát tiền khả thi, tinh chỉnh plan trong cùng 1 luồng chat.
-- [Danh Mục 18 Công Cụ MCP (MCP Tools Reference)](docs/mcp-tools.md): Đặc tả chi tiết 18 công cụ MCP kèm schema và ví dụ.
+- [Danh Mục 19 Công Cụ MCP (MCP Tools Reference)](docs/mcp-tools.md): Đặc tả chi tiết 19 công cụ MCP kèm schema và ví dụ.
 - [Khung Quản Trị Kỹ Thuật RULES.MD (Governance Framework)](docs/rules-governance.md): 5 Tiên đề nền tảng, 6 phần bắt buộc, công thức PERT, bảng rủi ro RAID.
-- [Động Cơ Trình Duyệt Gemini Web (Browser Engine)](docs/browser-engine.md): Tự động hóa Playwright, cơ chế chọn 3.8 Flash, bypass 4 tầng.
+- [Động Cơ Trình Duyệt Gemini Web (Browser Engine)](docs/browser-engine.md): Tự động hóa Playwright, cơ chế chọn 4 Argon & Thinking level, bypass 4 tầng.
 - [Mô Hình An Toàn & Bảo Mật (Security & Threat Model)](docs/security.md): Bất biến Zero-Write, kiểm soát realpath, bộ lọc che giấu bí mật.
 - [Sổ Tay Xử Lý Sự Cố (Troubleshooting Guide)](docs/troubleshooting.md): Chẩn đoán `g2a doctor`, đăng nhập Google, xử lý khóa profile, xung đột cổng.
 

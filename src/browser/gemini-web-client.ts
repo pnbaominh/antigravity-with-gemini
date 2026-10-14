@@ -31,7 +31,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
       headless: config.headless ?? false,
       timeoutMs: config.timeoutMs ?? 180_000,
       browserPath: config.browserPath,
-      preferredModel: config.preferredModel || process.env.GEMINI_MODEL || "3.8 Flash",
+      preferredModel: config.preferredModel || process.env.GEMINI_MODEL || "4 Argon",
     };
   }
 
@@ -360,12 +360,12 @@ export class GeminiWebClient implements GeminiGenerationClient {
         );
       }
 
-      // Ensure target model (prioritize 3.8 Flash > 3.1 Pro > 3.5 Flash-Lite) is selected
+      // Ensure target model (prioritize 4 Argon > 3.8 Flash > 3.1 Pro > 3.5 Flash-Lite) is selected
       const activeModel =
         options?.model ||
         this.config.preferredModel ||
         process.env.GEMINI_MODEL ||
-        "3.8 Flash";
+        "4 Argon";
       await this.ensureBestModel(page, activeModel);
     } else {
       // Continuing conversation in the EXACT SAME CHAT THREAD:
@@ -378,7 +378,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
       options?.model ||
       this.config.preferredModel ||
       process.env.GEMINI_MODEL ||
-      "3.8 Flash";
+      "4 Argon";
 
     // Clean, natural prompt incorporating system instruction if provided (fresh chats only)
     let fullPrompt = prompt;
@@ -682,16 +682,16 @@ export class GeminiWebClient implements GeminiGenerationClient {
     taskPrompt: string,
     previousError: string
   ): Promise<{ text: string; model: string }> {
-    return await this.executeAutonomousBypass(page, taskPrompt, previousError, "3.8 Flash");
+    return await this.executeAutonomousBypass(page, taskPrompt, previousError, "4 Argon");
   }
 
   /**
    * Autonomous Multi-Tier Adaptive Bypass Engine (Zero code edits required by user).
    * If the newest model refuses or encounters an error, this method autonomously executes
    * progressive self-healing tiers:
-   * - Tier 1: Deep Architectural RFC Safe-Framing on current model.
+   * - Tier 1: Deep Architectural RFC Safe-Framing on current model (4 Argon).
    * - Tier 2: Structural Data-Contract & Inversion (specifying types & interfaces without action verbs).
-   * - Tier 3: Autonomous Cross-Model Fallback (e.g. 3.8 Flash -> 3.1 Pro) in a clean chat session.
+   * - Tier 3: Autonomous Cross-Model Fallback (e.g. 4 Argon -> 3.8 Flash -> 3.1 Pro) in a clean chat session.
    * - Tier 4: Lightweight Fallback (to 3.5 Flash-Lite) if Pro also encounters quota or refusal.
    * - Tier 5: Minimalist Core Architecture Scaffold.
    */
@@ -699,7 +699,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
     page: Page,
     taskPrompt: string,
     previousError: string,
-    initialModel: string = "3.8 Flash"
+    initialModel: string = "4 Argon"
   ): Promise<{ text: string; model: string }> {
     console.warn(
       `[GeminiWeb Bypass] Refusal or error detected ("${previousError.slice(0, 60)}..."). Initiating autonomous multi-tier adaptive bypass...`
@@ -884,11 +884,13 @@ Directly begin with "# Plan:".`;
       console.warn(`[GeminiWeb Bypass] Tier 2 failed: ${e?.message}`);
     }
 
-    // TIER 3: Autonomous Cross-Model Fallback (Switch between 3.8 Flash and 3.1 Pro)
+    // TIER 3: Autonomous Cross-Model Fallback (Switch from 4 Argon -> 3.8 Flash or 3.1 Pro)
     const alternateModel =
-      initialModel.toLowerCase().includes("flash") && !initialModel.toLowerCase().includes("lite")
+      initialModel.toLowerCase().includes("argon") || initialModel.includes("4")
+        ? "3.8 Flash"
+        : initialModel.toLowerCase().includes("flash") && !initialModel.toLowerCase().includes("lite")
         ? "3.1 Pro"
-        : "3.8 Flash";
+        : "4 Argon";
     try {
       console.warn(`[GeminiWeb Bypass] Tier 3: Autonomous model rotation -> Switching to ${alternateModel}...`);
       await this.resetToFreshChat(page);
@@ -1008,7 +1010,7 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
 
   /**
    * Automatically switches to the highest capability model available.
-   * Prioritizes newest models first: 3.8 Flash > 3.1 Pro > 3.5 Flash-Lite.
+   * Prioritizes newest models first: 4 Argon > 3.8 Flash > 3.1 Pro > 3.5 Flash-Lite.
    */
   public async ensureBestModel(page: Page, requestedModel?: string): Promise<void> {
     try {
@@ -1016,17 +1018,21 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
         requestedModel ||
         this.config.preferredModel ||
         process.env.GEMINI_MODEL ||
-        "3.8 Flash"
+        "4 Argon"
       ).toLowerCase();
 
-      // Normalize target key: "3.8", "3.1", or "3.5"
-      let targetKey = "3.8";
+      // Normalize target key: "4.0", "3.8", "3.1", or "3.5"
+      let targetKey = "4.0";
       if (rawTarget.includes("3.5") || rawTarget.includes("lite")) {
         targetKey = "3.5";
       } else if (rawTarget.includes("3.1") || rawTarget.includes("pro")) {
         targetKey = "3.1";
-      } else {
+      } else if (rawTarget.includes("3.8") || rawTarget.includes("flash")) {
         targetKey = "3.8";
+      } else if (rawTarget.includes("4") || rawTarget.includes("argon")) {
+        targetKey = "4.0";
+      } else {
+        targetKey = "4.0";
       }
 
       // 1. Focus input area so bottom toolbar and model selector are visible
@@ -1040,7 +1046,7 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
 
       // 2. Locate the model picker button
       const modeBtn = page.locator(
-        'button[aria-label*="Mở công cụ chọn chế độ"], button[aria-label*="chọn chế độ"], button[aria-label*="mode"], button[data-test-id*="mode"], button:has-text("Pro Mở rộng"), button:has-text("Flash Mở rộng"), button:has-text("3.1 Pro"), button:has-text("3.8 Flash")'
+        'button[aria-label*="Mở công cụ chọn chế độ"], button[aria-label*="chọn chế độ"], button[aria-label*="mode"], button[data-test-id*="mode"], button:has-text("4 Argon"), button:has-text("Argon"), button:has-text("Pro Mở rộng"), button:has-text("Flash Mở rộng"), button:has-text("3.1 Pro"), button:has-text("3.8 Flash")'
       ).first();
 
       const isVisible = await modeBtn.isVisible({ timeout: 5000 }).catch(() => false);
@@ -1051,19 +1057,17 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
       const currentText = (await modeBtn.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
       const currentAria = (await modeBtn.getAttribute("aria-label").catch(() => "")) || "";
 
-      // Check if already on target model
+      // Check if already on target model (for models without thinking submenu, return early)
       if (targetKey === "3.8") {
         if (
           (currentText.includes("Flash") || currentText.includes("3.8") || currentAria.includes("Flash") || currentAria.includes("3.8")) &&
           !currentText.includes("Lite") &&
           !currentText.includes("Pro") &&
-          !currentAria.includes("Pro")
+          !currentText.includes("Argon") &&
+          !currentAria.includes("Pro") &&
+          !currentAria.includes("Argon")
         ) {
           return; // Already on 3.8 Flash
-        }
-      } else if (targetKey === "3.1") {
-        if (currentText.includes("Pro") || currentText.includes("3.1") || currentAria.includes("Pro")) {
-          return; // Already on 3.1 Pro
         }
       } else if (targetKey === "3.5") {
         if (currentText.includes("Lite") || currentText.includes("3.5") || currentAria.includes("Lite")) {
@@ -1077,24 +1081,65 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
 
       // 4. Click target menu item directly via role="menuitem"
       const targetItem = page.locator(
-        targetKey === "3.8"
-          ? '[role="menuitem"]:has-text("3.8 Flash"), .mat-mdc-menu-item:has-text("3.8 Flash")'
+        targetKey === "4.0"
+          ? '[role="menuitem"]:has-text("4 Argon"), .mat-mdc-menu-item:has-text("4 Argon"), [role="menuitem"]:has-text("Argon"), [role="menuitem"]:has-text("4.0"), [role="menuitem"]:has-text("4")'
+          : targetKey === "3.8"
+          ? '[role="menuitem"]:has-text("3.8 Flash"), .mat-mdc-menu-item:has-text("3.8 Flash"), [role="menuitem"]:has-text("3.8"), .mat-mdc-menu-item:has-text("3.8"), [role="menuitem"]:has-text("Flash Mở rộng"), [role="menuitem"]:has-text("Flash")'
           : targetKey === "3.1"
-          ? '[role="menuitem"]:has-text("3.1 Pro"), .mat-mdc-menu-item:has-text("3.1 Pro")'
-          : '[role="menuitem"]:has-text("Flash-Lite"), .mat-mdc-menu-item:has-text("Flash-Lite")'
+          ? '[role="menuitem"]:has-text("3.1 Pro"), .mat-mdc-menu-item:has-text("3.1 Pro"), [role="menuitem"]:has-text("3.1"), .mat-mdc-menu-item:has-text("3.1"), [role="menuitem"]:has-text("Pro Mở rộng"), [role="menuitem"]:has-text("Pro")'
+          : '[role="menuitem"]:has-text("Flash-Lite"), .mat-mdc-menu-item:has-text("Flash-Lite"), [role="menuitem"]:has-text("3.5")'
       ).first();
 
       if (await targetItem.isVisible({ timeout: 3000 }).catch(() => false)) {
         await targetItem.click({ force: true });
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(800);
+      }
+
+      // Ensure thinking level is set to maximum capacity for 4 Argon and thinking models
+      if (targetKey === "4.0" || targetKey === "3.1") {
+        await this.ensureThinkingLevelMax(page);
       }
 
       // 5. Ensure dropdown is closed
       await page.keyboard.press("Escape").catch(() => {});
-      console.log(`[GeminiWeb] ✓ Model selector updated to target ${targetKey === "3.8" ? "3.8 Flash" : targetKey === "3.1" ? "3.1 Pro" : "3.5 Flash-Lite"}`);
+      console.log(`[GeminiWeb] ✓ Model selector updated to target ${targetKey === "4.0" ? "4 Argon" : targetKey === "3.8" ? "3.8 Flash" : targetKey === "3.1" ? "3.1 Pro" : "3.5 Flash-Lite"}`);
     } catch (err: any) {
       console.warn(`[GeminiWeb] Model selection notice: ${err?.message || err}`);
     }
+  }
+
+  /**
+   * Ensures Thinking Level ("Cấp độ tư duy") is configured to maximum capacity if present in UI.
+   */
+  public async ensureThinkingLevelMax(page: Page): Promise<void> {
+    try {
+      const thinkingLevelBtn = page.locator(
+        '[role="menuitem"]:has-text("Cấp độ tư duy"), [role="menuitem"]:has-text("Thinking level"), button:has-text("Cấp độ tư duy"), button:has-text("Thinking level")'
+      ).first();
+
+      if (await thinkingLevelBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await thinkingLevelBtn.hover();
+        await page.waitForTimeout(400);
+
+        let maxLevelOption = page.locator(
+          '[role="menuitem"]:has-text("Cao"), [role="menuitem"]:has-text("High"), [role="menuitem"]:has-text("Nâng cao"), [role="menuitem"]:has-text("Tối đa"), [role="menuitem"]:has-text("Toàn diện")'
+        ).first();
+
+        if (!(await maxLevelOption.isVisible({ timeout: 600 }).catch(() => false))) {
+          await thinkingLevelBtn.click({ force: true });
+          await page.waitForTimeout(400);
+          maxLevelOption = page.locator(
+            '[role="menuitem"]:has-text("Cao"), [role="menuitem"]:has-text("High"), [role="menuitem"]:has-text("Nâng cao"), [role="menuitem"]:has-text("Tối đa"), [role="menuitem"]:has-text("Toàn diện")'
+          ).first();
+        }
+
+        if (await maxLevelOption.isVisible({ timeout: 1500 }).catch(() => false)) {
+          await maxLevelOption.click({ force: true });
+          await page.waitForTimeout(500);
+          console.log("[GeminiWeb] ✓ Thinking level configured to maximum capacity (Cao / High / Tối đa)");
+        }
+      }
+    } catch {}
   }
 
   /**

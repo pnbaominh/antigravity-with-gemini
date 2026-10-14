@@ -121,7 +121,7 @@ PERT: O=2, M=4, P=6
     expect(mockClient.generate).toHaveBeenCalledWith(
       expect.stringContaining("Build distributed Redis cache"),
       expect.objectContaining({
-        thinkingBudget: 4096,
+        thinkingBudget: 8192,
         systemInstruction: expect.stringContaining("RULES.MD"),
       })
     );

@@ -65,7 +65,7 @@ export class GeminiThinkingClient implements GeminiGenerationClient {
     }
 
     const modelName = options.model || DEFAULT_GEMINI_MODELS.THINKING;
-    const thinkingBudget = options.thinkingBudget ?? 4096;
+    const thinkingBudget = options.thinkingBudget ?? 8192;
 
     const config: Record<string, any> = {};
 
@@ -172,6 +172,6 @@ export function createDefaultClient(preferredModel?: string): GeminiGenerationCl
     }
   }
   return new GeminiWebClient({
-    preferredModel: preferredModel || process.env.GEMINI_MODEL || "3.8 Flash",
+    preferredModel: preferredModel || process.env.GEMINI_MODEL || "4 Argon",
   });
 }

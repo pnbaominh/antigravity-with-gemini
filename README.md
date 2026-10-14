@@ -61,12 +61,14 @@ node ./bin/g2a.js status
 | Command | Description |
 |---|---|
 | `g2a setup` | Initialize environment, install Antigravity skill, run health checks |
+| `g2a login-web` | Launch browser to sign in to Google Gemini Web (gemini.google.com) and save persistent session |
 | `g2a start` | Start the G2A bridge daemon in background (or `-f` for foreground) |
 | `g2a stop` | Stop the running bridge daemon |
 | `g2a status` | Inspect bridge PID, active port, SSE endpoint, and tunnel state |
 | `g2a doctor` | Comprehensive environment diagnostics (Node, Git, Cloudflared) |
 | `g2a pair` | Generate a fresh 6-digit one-time pairing code |
-| `g2a plan "<task>"` | Ask Gemini Thinking (Principal Architect mode) to create a phased implementation blueprint |
+| `g2a ask "<task>"` | Formulate structured discovery questions via Agency-Agents methodology |
+| `g2a plan "<task>"` | Ask Gemini Thinking (`4 Argon` / `3.8 Flash`) to create a phased implementation blueprint |
 | `g2a web "<task>"` | Copy workspace context & prompt to clipboard and open Google Gemini Web (gemini.google.com) |
 | `g2a review` | Ask Gemini to perform an adversarial review of current git diff |
 | `g2a tunnel` | Start a public Cloudflare quick tunnel for remote connections |
@@ -107,9 +109,9 @@ Comprehensive technical documentation is available in the [`docs/`](docs/README.
 
 - [System Architecture](docs/architecture.md): Dual-engine design, zero-token pointers, security boundaries.
 - [The [G2A] Lifecycle Protocol](docs/protocol.md): State machine, in-thread refinement, JIT phase delivery.
-- [MCP Tools Reference](docs/mcp-tools.md): Complete catalog of all 18 MCP tools with schemas and examples.
+- [MCP Tools Reference](docs/mcp-tools.md): Complete catalog of all 19 MCP tools with schemas and examples.
 - [RULES.MD Technical Governance](docs/rules-governance.md): 5 Axioms, 6 mandatory sections, PERT math, RAID pre-mortem.
-- [Gemini Web Browser Engine](docs/browser-engine.md): Playwright automation, 3.8 Flash model switching, 4-tier bypass.
+- [Gemini Web Browser Engine](docs/browser-engine.md): Playwright automation, 4 Argon model switching, 4-tier bypass.
 - [Security & Threat Model](docs/security.md): Zero-write guarantees, path confinement, secret masking.
 - [Troubleshooting Guide](docs/troubleshooting.md): Automated diagnostics, browser login, port conflicts, process cleanup.
 

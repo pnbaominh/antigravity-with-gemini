@@ -12,7 +12,7 @@ Welcome to the comprehensive technical documentation for **Antigravity with Gemi
 ### 1. [System Architecture](architecture.md)
 Detailed architectural overview of G2A:
 - High-level design and dual-engine architecture (Gemini Web Client vs Google GenAI Studio API)
-- The 18 Model Context Protocol (MCP) tools catalog
+- The 19 Model Context Protocol (MCP) tools catalog
 - Token boundary isolation and Zero-Token Pointer Tickets (< 50 tokens)
 - Security invariants, realpath confinement, and secret shielding
 - Filesystem and configuration directory layout
@@ -26,9 +26,9 @@ The complete state machine governing autonomous agent operations:
 - JSON-RPC 2.0 message contracts over Stdio and SSE
 
 ### 3. [MCP Tools Reference](mcp-tools.md)
-Complete specification of all 18 MCP tools:
+Complete specification of all 19 MCP tools:
 - **Group A (9 Workspace Read Tools)**: `workspace_info`, `list_directory`, `read_file`, `search_workspace`, `git_status`, `git_diff`, `test_status`, `execution_summary`, `execution_output`
-- **Group B (9 Thinking & Governance Tools)**: `gemini_plan`, `gemini_get_phase`, `gemini_active_plan`, `gemini_review`, `gemini_think`, `gemini_validate_plan`, `gemini_calculate_pert`, `gemini_list_models`, `gemini_refresh_models`
+- **Group B (10 Thinking & Governance Tools)**: `gemini_plan`, `gemini_get_phase`, `gemini_active_plan`, `gemini_review`, `gemini_think`, `gemini_validate_plan`, `gemini_calculate_pert`, `gemini_list_models`, `gemini_refresh_models`, `gemini_agency_questions`
 - Parameter types, return schemas, error handling, and example payloads
 
 ### 4. [RULES.MD Technical Governance Framework](rules-governance.md)
@@ -43,7 +43,7 @@ The formal engineering standard for AI-generated plans:
 Deep dive into the autonomous browser driver:
 - Playwright persistent context management with `~/.g2a/browser_profile`
 - Chromium browser auto-discovery (Brave, Chrome, Edge)
-- Angular Material overlay model selector automation (guaranteeing `3.8 Flash`)
+- Angular Material overlay model selector automation (guaranteeing `4 Argon` / `3.8 Flash` and maximum thinking level)
 - Single-chat in-thread continuity without page reloads
 - Quill rich-text Delta insertion and DOM stabilization
 - 4-Tier Autonomous Bypass System

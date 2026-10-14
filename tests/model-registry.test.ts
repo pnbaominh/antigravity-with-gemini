@@ -21,6 +21,7 @@ describe("DynamicModelRegistry", () => {
     "models/gemini-3.6-flash",
     "models/gemini-3.7-flash",
     "models/gemini-3.8-flash",
+    "models/gemini-4.0-argon",
     "models/gemini-3.8-live", // live streaming -> discarded
     "models/gemini-3.8-live-extended-thinking", // live streaming -> discarded
     "models/gemini-3.5-live-translate-preview", // live streaming -> discarded
@@ -48,6 +49,7 @@ describe("DynamicModelRegistry", () => {
     const supportedIds = supported.map((m) => m.id);
 
     // Kept models (> 3.0)
+    expect(supportedIds).toContain("gemini-4.0-argon");
     expect(supportedIds).toContain("gemini-3.8-flash");
     expect(supportedIds).toContain("gemini-3.7-flash");
     expect(supportedIds).toContain("gemini-3.6-flash");
@@ -83,10 +85,10 @@ describe("DynamicModelRegistry", () => {
 
   it("should sort supported models descending by version", () => {
     const { supported } = registry.filterSupportedModels(mockApiModels);
-    expect(supported[0].id).toBe("gemini-3.8-flash");
-    expect(supported[1].id).toBe("gemini-3.7-flash");
-    expect(supported[2].id).toBe("gemini-3.6-flash");
-    expect(supported[3].id).toBe("gemini-3.5-flash");
+    expect(supported[0].id).toBe("gemini-4.0-argon");
+    expect(supported[1].id).toBe("gemini-3.8-flash");
+    expect(supported[2].id).toBe("gemini-3.7-flash");
+    expect(supported[3].id).toBe("gemini-3.6-flash");
   });
 
   it("should persist and load cache atomically with TTL check", () => {

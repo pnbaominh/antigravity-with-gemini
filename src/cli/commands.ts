@@ -11,6 +11,7 @@ import { GeminiThinkingClient, createDefaultClient } from "../gemini/client.js";
 import { GeminiWebClient } from "../browser/gemini-web-client.js";
 import { GeminiPlanner } from "../gemini/planner.js";
 import { GeminiReviewer } from "../gemini/reviewer.js";
+import { AgencyDiscoveryEngine } from "../gemini/agency-discovery.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import { getGitDiff, getGitStatus } from "../workspace/git.js";
 import { getAntigravitySkillsDirectory, getAntigravityMcpConfigPath, saveGeminiApiKey } from "../config/paths.js";
@@ -392,4 +393,40 @@ export async function modelsCommand(options: { refresh?: boolean }) {
   }
   console.log("");
 }
+
+export async function askCommand(
+  workspaceRoot: string,
+  task: string,
+  options?: {
+    persona?: "architect" | "reality-checker" | "product-coach" | "security-auditor";
+    language?: "vi" | "en";
+    model?: string;
+  }
+) {
+  console.log(pc.bold(`\n🎯 Asking Agency-Agents Discovery Engine for: "${task}"...\n`));
+  const client = createDefaultClient(options?.model);
+  const discovery = new AgencyDiscoveryEngine(client);
+  const workspace = new WorkspaceManager(workspaceRoot);
+  const info = workspace.getInfo();
+  const summary = `Project: ${info.name}, Branch: ${info.branch || "unknown"}, Package Manager: ${info.packageManager}, Frameworks: ${info.frameworks.join(", ")}`;
+
+  try {
+    const result = await discovery.discover({
+      task,
+      workspaceSummary: summary,
+      persona: options?.persona,
+      language: options?.language,
+      model: options?.model,
+    });
+    console.log(result.rawMarkdown);
+    console.log();
+  } catch (err: any) {
+    console.error(pc.red(`Agency discovery failed: ${err?.message || err}`));
+  } finally {
+    if ((client as any).close) {
+      await (client as any).close();
+    }
+  }
+}
+
 
