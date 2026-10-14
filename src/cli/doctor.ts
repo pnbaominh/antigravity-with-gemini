@@ -1,10 +1,13 @@
 import { execSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import pc from "picocolors";
 import { getGitStatus } from "../workspace/git.js";
-import { getStateDirectory, getSavedGeminiApiKey } from "../config/paths.js";
+import { getStateDirectory, getSavedGeminiApiKey, getAntigravityMcpConfigPath } from "../config/paths.js";
 import { BridgeRuntime } from "../bridge/runtime.js";
 import { BrowserDetector } from "../browser/detector.js";
+import { cleanupBrowserSingletonLocks } from "../utils/platform.js";
 
 export interface DoctorCheck {
   name: string;
@@ -114,7 +117,67 @@ export async function runDoctorChecks(workspaceRoot: string): Promise<DoctorChec
     });
   }
 
-  // 6. Bridge Daemon Status
+  // 6. Plans Directory Permissions (.g2a/plans)
+  try {
+    const plansDir = path.join(workspaceRoot, ".g2a", "plans");
+    if (!fs.existsSync(plansDir)) {
+      fs.mkdirSync(plansDir, { recursive: true });
+    }
+    fs.accessSync(plansDir, fs.constants.W_OK);
+    checks.push({
+      name: "Plans Directory (.g2a/plans)",
+      ok: true,
+      message: `Writable at ${plansDir}`,
+    });
+  } catch (err: any) {
+    checks.push({
+      name: "Plans Directory (.g2a/plans)",
+      ok: false,
+      message: `Cannot write to .g2a/plans: ${err?.message}`,
+      fixSuggestion: "Ensure read/write permissions for the workspace folder.",
+    });
+  }
+
+  // 7. Browser Profile SingletonLock Check
+  try {
+    const browserProfileDir = path.join(os.homedir(), ".g2a", "browser_profile");
+    const lockResult = await cleanupBrowserSingletonLocks(browserProfileDir);
+    if (lockResult.isClean) {
+      checks.push({
+        name: "Browser SingletonLock",
+        ok: true,
+        message: lockResult.removedLockFiles.length > 0
+          ? `Cleaned up ${lockResult.removedLockFiles.length} stale lock file(s)`
+          : "Clean (No stale lockfiles detected)",
+      });
+    } else {
+      checks.push({
+        name: "Browser SingletonLock",
+        ok: true,
+        message: `Browser profile is currently locked by active instance (${lockResult.lockedByActiveProcessFiles.join(", ")})`,
+        fixSuggestion: "Close running instances of Brave/Chrome using this profile if you experience launch conflicts.",
+      });
+    }
+  } catch {}
+
+  // 8. Antigravity MCP Config Registration
+  try {
+    const mcpConfigPath = getAntigravityMcpConfigPath();
+    if (fs.existsSync(mcpConfigPath)) {
+      const content = JSON.parse(fs.readFileSync(mcpConfigPath, "utf-8"));
+      const isRegistered = !!content?.mcpServers?.["antigravity-with-gemini"];
+      checks.push({
+        name: "Antigravity MCP Config",
+        ok: isRegistered,
+        message: isRegistered
+          ? `Registered in ${path.basename(mcpConfigPath)}`
+          : `antigravity-with-gemini entry missing in ${mcpConfigPath}`,
+        fixSuggestion: isRegistered ? undefined : "Run `g2a setup` to register automatically.",
+      });
+    }
+  } catch {}
+
+  // 9. Bridge Daemon Status
   const runtime = new BridgeRuntime(workspaceRoot);
   const daemonStatus = await runtime.getStatus();
   checks.push({

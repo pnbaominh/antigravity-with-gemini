@@ -65,4 +65,38 @@ describe("AgencyDiscoveryEngine", () => {
       })
     );
   });
+
+  it("should build Reconnaissance Dossier accurately from target workspace", async () => {
+    const mockClient: GeminiGenerationClient = {
+      isConfigured: () => true,
+      generate: vi.fn(),
+    };
+    const engine = new AgencyDiscoveryEngine(mockClient);
+    const dossier = await engine.buildReconnaissanceDossier(process.cwd());
+
+    expect(dossier.projectName).toBe("antigravity-with-gemini");
+    expect(dossier.moduleType).toBe("module");
+    expect(dossier.configFilesDetected).toContain("package.json");
+    expect(dossier.configFilesDetected).toContain("tsconfig.json");
+    expect(dossier.topLevelDirectories).toContain("src");
+    expect(dossier.topLevelDirectories).toContain("tests");
+    expect(dossier.topLevelDirectories).not.toContain("node_modules");
+  });
+
+  it("should generate full Agency Discovery Report with dossier and questions", async () => {
+    const mockClient: GeminiGenerationClient = {
+      isConfigured: () => true,
+      generate: vi.fn().mockResolvedValue({
+        text: sampleDiscoveryOutput,
+        model: "4 Argon",
+      }),
+    };
+    const engine = new AgencyDiscoveryEngine(mockClient);
+    const report = await engine.generateAgencyDiscoveryReport("Thực thi khảo sát", process.cwd());
+
+    expect(report.dossier).toBeDefined();
+    expect(report.questions.length).toBeGreaterThan(0);
+    expect(report.questions[0].dimension).toBe("scope");
+    expect(report.formattedPromptBlock).toBeTruthy();
+  });
 });

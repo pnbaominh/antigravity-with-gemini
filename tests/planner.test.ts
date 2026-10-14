@@ -344,6 +344,18 @@ Implement hardened Redis caching with DistributedLock to prevent stampede.
     // Refinement call: continueConversation MUST be true (keep exact same chat thread!)
     expect(capturedOptions[capturedOptions.length - 1].continueConversation).toBe(true);
   });
+
+  it("should parse phases cleanly even when input has Windows CRLF newlines", () => {
+    const dummyClient = {} as GeminiThinkingClient;
+    const planner = new GeminiPlanner(dummyClient);
+    const crlfPlan = sampleArchitectPlan.replace(/\n/g, "\r\n");
+
+    // @ts-expect-error - testing private parsePhases method
+    const phases = planner.parsePhases(crlfPlan);
+    expect(phases).toHaveLength(3);
+    expect(phases[0].tasks.length).toBeGreaterThan(0);
+    expect(phases[0].verification).toContain("npm test");
+  });
 });
 
 

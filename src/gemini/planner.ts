@@ -5,6 +5,7 @@ import { PromptSanitizer } from "./prompt-sanitizer.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { normalizeLineEndings } from "../utils/platform.js";
 
 export interface PlanResult {
   title: string;
@@ -642,30 +643,32 @@ Thank you.`;
   }
 
   private parsePlanOutput(rawMarkdown: string): PlanResult {
+    const cleanMarkdown = normalizeLineEndings(rawMarkdown);
     const titleMatch =
-      rawMarkdown.match(/^(?:#+\s*)?Plan:\s*(.+)$/im) ||
-      rawMarkdown.match(/^# (?:Plan:\s*)?(.+)$/m);
+      cleanMarkdown.match(/^(?:#+\s*)?Plan:\s*(.+)$/im) ||
+      cleanMarkdown.match(/^# (?:Plan:\s*)?(.+)$/m);
     const title = titleMatch ? titleMatch[1].trim() : "Implementation Plan";
 
-    const execSummaryMatch = rawMarkdown.match(
+    const execSummaryMatch = cleanMarkdown.match(
       /## [^\n]*(?:Executive Summary|Summary|AS-IS)[^\n]*\n([\s\S]*?)(?=(?:\n##|\n###))/i
     );
-    const summary = execSummaryMatch ? execSummaryMatch[1].trim() : rawMarkdown.slice(0, 300) + "...";
+    const summary = execSummaryMatch ? execSummaryMatch[1].trim() : cleanMarkdown.slice(0, 300) + "...";
 
     return {
       title,
       summary,
-      phases: this.parsePhases(rawMarkdown),
-      rawMarkdown,
+      phases: this.parsePhases(cleanMarkdown),
+      rawMarkdown: cleanMarkdown,
     };
   }
 
   private parsePhases(markdown: string): PlanResult["phases"] {
+    const cleanMarkdown = normalizeLineEndings(markdown);
     const phases: PlanResult["phases"] = [];
     const phaseRegex = /(?:###|##)\s*Phase\s*(\d+[:.]?\s*[^\n]+)([\s\S]*?)(?=(?:###|##)\s*Phase|\n##\s+[^\n]+|$)/gi;
     let match: RegExpExecArray | null;
 
-    while ((match = phaseRegex.exec(markdown)) !== null) {
+    while ((match = phaseRegex.exec(cleanMarkdown)) !== null) {
       const phaseName = match[1].trim();
       const content = match[2];
 

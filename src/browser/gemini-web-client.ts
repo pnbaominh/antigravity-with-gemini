@@ -5,12 +5,93 @@ import fs from "fs";
 import { BrowserDetector } from "./detector.js";
 import type { GeminiGenerationClient } from "../gemini/client-interface.js";
 import { PromptSanitizer } from "../gemini/prompt-sanitizer.js";
+import { cleanupBrowserSingletonLocks } from "../utils/platform.js";
+import type { CircuitState, CircuitBreakerSnapshot } from "../types.js";
+
+export class AsyncMutex {
+  private mutex = Promise.resolve();
+
+  async acquire(): Promise<() => void> {
+    let release: () => void;
+    const next = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const current = this.mutex;
+    this.mutex = this.mutex.then(() => next);
+    await current;
+    return release!;
+  }
+
+  async runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const release = await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+}
+
+export class WebEngineCircuitBreaker {
+  private state: CircuitState = "CLOSED";
+  private failureCount = 0;
+  private lastFailureTime: number | null = null;
+  private readonly threshold: number;
+  private readonly resetTimeoutMs: number;
+
+  constructor(threshold = 3, resetTimeoutMs = 60000) {
+    this.threshold = threshold;
+    this.resetTimeoutMs = resetTimeoutMs;
+  }
+
+  public recordSuccess() {
+    this.failureCount = 0;
+    this.state = "CLOSED";
+  }
+
+  public recordFailure() {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+    if (this.failureCount >= this.threshold) {
+      this.state = "OPEN";
+    }
+  }
+
+  public canExecute(): boolean {
+    if (this.state === "CLOSED") return true;
+    if (this.state === "OPEN" && this.lastFailureTime) {
+      if (Date.now() - this.lastFailureTime >= this.resetTimeoutMs) {
+        this.state = "HALF_OPEN";
+        return true;
+      }
+      return false;
+    }
+    return this.state === "HALF_OPEN";
+  }
+
+  public getSnapshot(): CircuitBreakerSnapshot {
+    return {
+      state: this.state,
+      consecutiveFailures: this.failureCount,
+      lastFailureTimestampMs: this.lastFailureTime,
+      nextAttemptAllowedAtMs: this.lastFailureTime ? this.lastFailureTime + this.resetTimeoutMs : null,
+    };
+  }
+}
+
+export function computeBackoffWithJitter(attempt: number, baseMs = 1000): number {
+  const exp = Math.min(attempt, 4);
+  const backoff = baseMs * Math.pow(2, exp);
+  const jitter = Math.random() * 0.3 * backoff;
+  return Math.floor(backoff + jitter);
+}
 
 export interface GeminiWebClientConfig {
   profileDir?: string;
   userDataDir?: string;
   headless?: boolean;
   timeoutMs?: number;
+  stabilityWindowMs?: number;
   executablePath?: string;
   browserPath?: string;
   preferredModel?: string;
@@ -23,6 +104,8 @@ export class GeminiWebClient implements GeminiGenerationClient {
   private context: BrowserContext | null = null;
   private page: Page | null = null;
   private defaultUserDataDir: string;
+  private mutex = new AsyncMutex();
+  private circuitBreaker = new WebEngineCircuitBreaker();
 
   constructor(config: WebClientConfig = {}) {
     this.defaultUserDataDir = path.join(os.homedir(), ".g2a", "browser_profile");
@@ -30,6 +113,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
       userDataDir: config.userDataDir || this.defaultUserDataDir,
       headless: config.headless ?? false,
       timeoutMs: config.timeoutMs ?? 180_000,
+      stabilityWindowMs: config.stabilityWindowMs ?? 2500,
       browserPath: config.browserPath,
       preferredModel: config.preferredModel || process.env.GEMINI_MODEL || "4 Argon",
     };
@@ -67,43 +151,48 @@ export class GeminiWebClient implements GeminiGenerationClient {
    * Initializes or reuses the persistent browser context.
    */
   public async getPage(forceHeaded = false): Promise<Page> {
-    if (this.page && !this.page.isClosed() && this.context) {
-      return this.page;
-    }
+    return await this.mutex.runExclusive(async () => {
+      if (this.page && !this.page.isClosed() && this.context) {
+        return this.page;
+      }
 
-    const executablePath = this.getExecutablePath();
-    const userDataDir = this.getUserDataDir();
-    if (!fs.existsSync(userDataDir)) {
-      fs.mkdirSync(userDataDir, { recursive: true });
-    }
+      const executablePath = this.getExecutablePath();
+      const userDataDir = this.getUserDataDir();
+      if (!fs.existsSync(userDataDir)) {
+        fs.mkdirSync(userDataDir, { recursive: true });
+      }
 
-    const headless = forceHeaded ? false : (this.config.headless ?? false);
+      // Proactively clean up any stale lock files before launching
+      await cleanupBrowserSingletonLocks(userDataDir);
 
-    this.context = await chromium.launchPersistentContext(userDataDir, {
-      executablePath,
-      headless,
-      viewport: { width: 1280, height: 900 },
-      args: [
-        "--disable-blink-features=AutomationControlled",
-        "--no-first-run",
-        "--no-default-browser-check",
-      ],
-      ignoreDefaultArgs: ["--enable-automation"],
-    });
+      const headless = forceHeaded ? false : (this.config.headless ?? false);
 
-    const pages = this.context.pages();
-    this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
-
-    // Stealth: Remove navigator.webdriver flag
-    try {
-      await this.context.addInitScript(() => {
-        Object.defineProperty(navigator, "webdriver", {
-          get: () => undefined,
-        });
+      this.context = await chromium.launchPersistentContext(userDataDir, {
+        executablePath,
+        headless,
+        viewport: { width: 1280, height: 900 },
+        args: [
+          "--disable-blink-features=AutomationControlled",
+          "--no-first-run",
+          "--no-default-browser-check",
+        ],
+        ignoreDefaultArgs: ["--enable-automation"],
       });
-    } catch {}
 
-    return this.page;
+      const pages = this.context.pages();
+      this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
+
+      // Stealth: Remove navigator.webdriver flag
+      try {
+        await this.context.addInitScript(() => {
+          Object.defineProperty(navigator, "webdriver", {
+            get: () => undefined,
+          });
+        });
+      } catch {}
+
+      return this.page;
+    });
   }
 
   /**
@@ -585,11 +674,12 @@ export class GeminiWebClient implements GeminiGenerationClient {
         break;
       }
 
-      // Check stabilization on new text
+      // Check stabilization on new text using configured stabilityWindowMs (default 2500ms)
+      const requiredStableCount = Math.max(2, Math.round((this.config.stabilityWindowMs || 2500) / 1000));
       if (status.latestText.length > 0 && (status.isNewText || initialLatestText === "")) {
         if (status.latestText === lastContent && !status.isGenerating) {
           stableCount++;
-          if (stableCount >= 2) {
+          if (stableCount >= requiredStableCount) {
             break;
           }
         } else {

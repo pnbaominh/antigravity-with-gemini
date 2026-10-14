@@ -16,9 +16,13 @@ export async function runMcpStdio(
   options: McpStdioOptions = {}
 ): Promise<void> {
   // Ensure that stdout is reserved strictly for MCP JSON-RPC messages.
-  // Re-route normal console.log to stderr so logs don't corrupt the protocol stream.
+  // Re-route normal console.log and console.info to stderr so logs don't corrupt the protocol stream.
   const originalLog = console.log;
+  const originalInfo = console.info;
   console.log = (...args: any[]) => {
+    console.error("[g2a:stdio]", ...args);
+  };
+  console.info = (...args: any[]) => {
     console.error("[g2a:stdio]", ...args);
   };
 
@@ -35,6 +39,7 @@ export async function runMcpStdio(
       // ignore
     } finally {
       console.log = originalLog;
+      console.info = originalInfo;
     }
   };
 

@@ -97,5 +97,55 @@ Build resilient browser automation bridge.
     // @ts-expect-error - inspect private config
     expect(client.config.preferredModel).toBe("4 Argon");
   });
+
+  describe("AsyncMutex & Resilience Utilities", () => {
+    it("should ensure sequential exclusive execution with AsyncMutex", async () => {
+      const { AsyncMutex } = await import("../src/browser/gemini-web-client.js");
+      const mutex = new AsyncMutex();
+      const order: number[] = [];
+
+      const p1 = mutex.runExclusive(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+        order.push(1);
+      });
+      const p2 = mutex.runExclusive(async () => {
+        order.push(2);
+      });
+
+      await Promise.all([p1, p2]);
+      expect(order).toEqual([1, 2]);
+    });
+
+    it("should trip circuit breaker after reaching failure threshold", async () => {
+      const { WebEngineCircuitBreaker } = await import("../src/browser/gemini-web-client.js");
+      const cb = new WebEngineCircuitBreaker(2, 500);
+
+      expect(cb.canExecute()).toBe(true);
+      cb.recordFailure();
+      expect(cb.canExecute()).toBe(true);
+      cb.recordFailure(); // Reached threshold (2)
+      expect(cb.canExecute()).toBe(false);
+      expect(cb.getSnapshot().state).toBe("OPEN");
+
+      // After resetTimeoutMs, it should transition to HALF_OPEN
+      await new Promise((r) => setTimeout(r, 550));
+      expect(cb.canExecute()).toBe(true);
+      expect(cb.getSnapshot().state).toBe("HALF_OPEN");
+
+      // Successful attempt resets to CLOSED
+      cb.recordSuccess();
+      expect(cb.getSnapshot().state).toBe("CLOSED");
+    });
+
+    it("should compute backoff with jitter within expected bounds", async () => {
+      const { computeBackoffWithJitter } = await import("../src/browser/gemini-web-client.js");
+      const b0 = computeBackoffWithJitter(0, 1000);
+      expect(b0).toBeGreaterThanOrEqual(1000);
+      expect(b0).toBeLessThan(1500);
+
+      const b1 = computeBackoffWithJitter(1, 1000);
+      expect(b1).toBeGreaterThanOrEqual(2000);
+    });
+  });
 });
 
