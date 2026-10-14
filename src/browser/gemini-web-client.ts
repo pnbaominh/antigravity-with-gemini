@@ -456,6 +456,10 @@ export class GeminiWebClient implements GeminiGenerationClient {
         process.env.GEMINI_MODEL ||
         "4 Argon";
       await this.ensureBestModel(page, activeModel);
+
+      // Select segmented mode (Default to "Nhiệm vụ" / Task mode for structured implementation plans)
+      const targetSegment = (options as any)?.segmentedMode || "task";
+      await this.ensureSegmentedMode(page, targetSegment);
     } else {
       // Continuing conversation in the EXACT SAME CHAT THREAD:
       // Absolutely NO clicking "Cuộc trò chuyện mới" / "New chat", NO navigation, NO page reload!
@@ -1228,6 +1232,24 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
           await page.waitForTimeout(500);
           console.log("[GeminiWeb] ✓ Thinking level configured to maximum capacity (Cao / High / Tối đa)");
         }
+      }
+    } catch {}
+  }
+
+  /**
+   * Selects between "Nhiệm vụ" (Task Mode - optimized for structured engineering plans)
+   * and "Cuộc trò chuyện" (Chat Mode - for general open discussion).
+   */
+  public async ensureSegmentedMode(page: Page, mode: "task" | "chat" = "task"): Promise<void> {
+    try {
+      const targetLabel = mode === "task" ? "Nhiệm vụ" : "Cuộc trò chuyện";
+      const btn = page
+        .locator(`button.gem-segmented-button-action:has-text("${targetLabel}")`)
+        .first();
+      if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await btn.click({ force: true });
+        await page.waitForTimeout(400);
+        console.log(`[GeminiWeb] ✓ Segmented mode configured to "${targetLabel}"`);
       }
     } catch {}
   }
