@@ -417,26 +417,37 @@ export class GeminiWebClient implements GeminiGenerationClient {
     const isContinuing = options?.continueConversation === true;
 
     if (!isContinuing) {
-      // Ensure we start in a fresh conversation on Gemini Web to prevent context pollution
-      if (!page.url().includes("gemini.google.com")) {
-        await page.goto("https://gemini.google.com/app", {
-          waitUntil: "domcontentloaded",
-          timeout: 45_000,
-        });
-        await page.waitForTimeout(2000);
-      } else {
-        // If already on Gemini Web, reset to a fresh chat for a brand new conversation
+      // Ensure we start in a fresh conversation on Gemini Web (https://gemini.google.com/app)
+      const currentUrl = page.url();
+      const isAlreadyOnFreshApp =
+        currentUrl === "https://gemini.google.com/app" ||
+        currentUrl === "https://gemini.google.com/app/";
+
+      if (!isAlreadyOnFreshApp) {
+        let clickedNewChat = false;
         try {
           const newChatBtn = page
             .locator(
               'button:has-text("Cuộc trò chuyện mới"), button:has-text("New chat"), a:has-text("Cuộc trò chuyện mới"), a:has-text("New chat"), [aria-label*="Cuộc trò chuyện mới"], [aria-label*="New chat"]'
             )
             .first();
-          if (await newChatBtn.isVisible()) {
+          if (await newChatBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
             await newChatBtn.click();
             await page.waitForTimeout(1500);
+            clickedNewChat =
+              page.url() === "https://gemini.google.com/app" ||
+              page.url() === "https://gemini.google.com/app/";
           }
         } catch {}
+
+        if (!clickedNewChat) {
+          console.log("[GeminiWeb] Resetting to fresh conversation: https://gemini.google.com/app");
+          await page.goto("https://gemini.google.com/app", {
+            waitUntil: "domcontentloaded",
+            timeout: 45_000,
+          });
+          await page.waitForTimeout(2000);
+        }
       }
 
       await this.handleCaptchaAndPopups(page);
@@ -472,6 +483,9 @@ export class GeminiWebClient implements GeminiGenerationClient {
       this.config.preferredModel ||
       process.env.GEMINI_MODEL ||
       "4 Argon";
+
+    // Enforce target model even when continuing in existing chat thread
+    await this.ensureBestModel(page, activeModel);
 
     // Clean, natural prompt incorporating system instruction if provided (fresh chats only)
     let fullPrompt = prompt;
@@ -1189,23 +1203,38 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
       await modeBtn.click({ force: true });
       await page.waitForTimeout(600);
 
-      // 5. Click target menu item directly via role="menuitem"
+      // 5. Click target menu item directly via role="menuitem" and native DOM dispatch
       const targetItem = page.locator(
         targetKey === "4.0"
-          ? '[role="menuitem"]:has-text("4 Argon"), .mat-mdc-menu-item:has-text("4 Argon"), [role="menuitem"]:has-text("Argon"), .mat-mdc-menu-item:has-text("Argon"), [role="menuitem"]:has-text("4.0"), [role="menuitem"]:has-text("4")'
+          ? 'gem-menu-item:has-text("4 Argon"), [role="menuitem"]:has-text("4 Argon"), .mat-mdc-menu-item:has-text("4 Argon"), button:has-text("4 Argon"), [role="menuitem"]:has-text("Argon"), .mat-mdc-menu-item:has-text("Argon"), [role="menuitem"]:has-text("Nhiệm vụ phức tạp")'
           : targetKey === "3.8"
-          ? '[role="menuitem"]:has-text("3.8 Flash"), .mat-mdc-menu-item:has-text("3.8 Flash"), [role="menuitem"]:has-text("3.8"), .mat-mdc-menu-item:has-text("3.8"), [role="menuitem"]:has-text("Flash Mở rộng"), [role="menuitem"]:has-text("Flash")'
+          ? 'gem-menu-item:has-text("3.8 Flash"), [role="menuitem"]:has-text("3.8 Flash"), .mat-mdc-menu-item:has-text("3.8 Flash"), button:has-text("3.8 Flash"), [role="menuitem"]:has-text("3.8"), [role="menuitem"]:has-text("Flash")'
           : targetKey === "3.1"
-          ? '[role="menuitem"]:has-text("3.1 Pro"), .mat-mdc-menu-item:has-text("3.1 Pro"), [role="menuitem"]:has-text("3.1"), .mat-mdc-menu-item:has-text("3.1"), [role="menuitem"]:has-text("Pro Mở rộng"), [role="menuitem"]:has-text("Pro")'
-          : '[role="menuitem"]:has-text("Flash-Lite"), .mat-mdc-menu-item:has-text("Flash-Lite"), [role="menuitem"]:has-text("3.5")'
+          ? 'gem-menu-item:has-text("3.1 Pro"), [role="menuitem"]:has-text("3.1 Pro"), [role="menuitem"]:has-text("3.1"), [role="menuitem"]:has-text("Pro")'
+          : 'gem-menu-item:has-text("Flash-Lite"), [role="menuitem"]:has-text("Flash-Lite"), [role="menuitem"]:has-text("3.5")'
       ).first();
 
-      if (await targetItem.isVisible({ timeout: 3000 }).catch(() => false)) {
+      if (await targetItem.isVisible({ timeout: 2500 }).catch(() => false)) {
         await targetItem.click({ force: true });
-        await page.waitForTimeout(800);
-      } else {
-        console.warn(`[GeminiWeb] Target model item for ${targetKey} not found in dropdown menu`);
+        await page.waitForTimeout(500);
       }
+
+      // Also dispatch native DOM click on the Angular gem-menu-item host element
+      await page.evaluate((key) => {
+        const items = Array.from(document.querySelectorAll('gem-menu-item, [role="menuitem"], .mat-mdc-menu-item'));
+        const match = items.find((el) => {
+          const t = (el.textContent || "").trim();
+          if (key === "4.0") return t.includes("4 Argon") || t.includes("Argon") || t.includes("Nhiệm vụ phức tạp");
+          if (key === "3.8") return t.includes("3.8 Flash") || t.includes("Flash");
+          if (key === "3.1") return t.includes("3.1 Pro") || t.includes("Pro");
+          if (key === "3.5") return t.includes("Flash-Lite") || t.includes("3.5");
+          return false;
+        });
+        if (match) {
+          (match as HTMLElement).click();
+        }
+      }, targetKey);
+      await page.waitForTimeout(800);
 
       // Ensure thinking level is set to maximum capacity for 4 Argon and thinking models if submenu exists
       if (targetKey === "4.0" || targetKey === "3.1") {
@@ -1219,7 +1248,52 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
         await page.waitForTimeout(300);
       }
 
-      const postText = (await modeBtn.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+      // 7. Verify model switched to target. If not, retry up to 2 times
+      let postText = (await modeBtn.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+      let postAria = (await modeBtn.getAttribute("aria-label").catch(() => "")) || "";
+
+      let isTargetSelected =
+        targetKey === "4.0"
+          ? (postText.includes("Argon") || postAria.includes("Argon")) && !postText.includes("Flash")
+          : targetKey === "3.8"
+          ? (postText.includes("Flash") || postAria.includes("Flash")) && !postText.includes("Lite") && !postText.includes("Argon")
+          : true;
+
+      for (let retry = 1; retry <= 2 && !isTargetSelected; retry++) {
+        console.warn(`[GeminiWeb] Target model verification attempt ${retry}: currently "${postText}". Retrying selection...`);
+        await modeBtn.click({ force: true });
+        await page.waitForTimeout(600);
+
+        await page.evaluate((key) => {
+          const items = Array.from(document.querySelectorAll('gem-menu-item, [role="menuitem"], .mat-mdc-menu-item'));
+          const match = items.find((el) => {
+            const t = (el.textContent || "").trim();
+            if (key === "4.0") return t.includes("4 Argon") || t.includes("Argon") || t.includes("Nhiệm vụ phức tạp");
+            if (key === "3.8") return t.includes("3.8 Flash") || t.includes("Flash");
+            if (key === "3.1") return t.includes("3.1 Pro") || t.includes("Pro");
+            if (key === "3.5") return t.includes("Flash-Lite") || t.includes("3.5");
+            return false;
+          });
+          if (match) {
+            (match as HTMLElement).click();
+          }
+        }, targetKey);
+        await page.waitForTimeout(800);
+
+        const backdropRetry = page.locator('.cdk-overlay-backdrop-showing').first();
+        if (await backdropRetry.isVisible().catch(() => false)) {
+          await page.keyboard.press("Escape").catch(() => {});
+          await page.waitForTimeout(200);
+        }
+
+        postText = (await modeBtn.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+        postAria = (await modeBtn.getAttribute("aria-label").catch(() => "")) || "";
+        isTargetSelected =
+          targetKey === "4.0"
+            ? (postText.includes("Argon") || postAria.includes("Argon")) && !postText.includes("Flash")
+            : true;
+      }
+
       console.log(
         `[GeminiWeb] ✓ Model selector updated to target ${
           targetKey === "4.0"
