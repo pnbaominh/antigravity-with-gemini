@@ -355,7 +355,7 @@ Format requirement: Directly begin your response with "# Plan: [Title]". Do not 
       thinkingBudget: 8192,
       model: targetModel,
       continueConversation: params.continueConversation ?? false,
-      segmentedMode: "chat",
+      segmentedMode: "task",
     });
 
     const draftMarkdown = draftResponse.text;

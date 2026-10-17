@@ -253,6 +253,20 @@ export class GeminiWebClient implements GeminiGenerationClient {
         await page.waitForTimeout(500);
       }
     } catch {}
+
+    // 3. Confirm onboarding / disclaimer dialogs (e.g. Task mode "Hãy bắt đầu nào" / "Tiếp tục")
+    try {
+      const continueBtn = page
+        .locator(
+          '.spark-onboarding-fre-panel button, mat-dialog-container button, button:has-text("Tiếp tục"), button:has-text("Continue"), button:has-text("Bắt đầu"), button:has-text("Get started")'
+        )
+        .last();
+      if (await continueBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+        console.log(`[GeminiWeb] ✓ Dismissing/confirming onboarding modal...`);
+        await continueBtn.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(500);
+      }
+    } catch {}
   }
 
   /**
@@ -276,6 +290,18 @@ export class GeminiWebClient implements GeminiGenerationClient {
   public async dismissOverlays(page: Page): Promise<void> {
     if (!page || page.isClosed()) return;
     try {
+      // 1. If an onboarding or action modal is open with a confirmation button, click it first
+      const confirmBtn = page
+        .locator(
+          '.spark-onboarding-fre-panel button, mat-dialog-container button, button:has-text("Tiếp tục"), button:has-text("Continue")'
+        )
+        .last();
+      if (await confirmBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+        await confirmBtn.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(400);
+      }
+
+      // 2. Clear any lingering backdrops
       const hasBackdrop = await page.evaluate(() => {
         const backdrops = document.querySelectorAll(
           '.cdk-overlay-backdrop-showing, .cdk-overlay-backdrop'
@@ -746,7 +772,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
     await textbox.waitFor({ state: "attached", timeout: 15_000 });
 
     // Verify textbox is not disabled by fieldset[disabled] or contenteditable="false"
-    const isDisabled = await page.evaluate(() => {
+    let isDisabled = await page.evaluate(() => {
       const tb = document.querySelector(
         'div[role="textbox"].ql-editor, rich-textarea div[role="textbox"], div[contenteditable="true"]'
       );
@@ -757,9 +783,26 @@ export class GeminiWebClient implements GeminiGenerationClient {
     });
 
     if (isDisabled) {
-      throw new Error(
-        "Gemini input textbox is disabled (account usage limit or disabled input area)."
-      );
+      // First attempt to resolve by clicking onboarding modals / disclaimer buttons
+      await this.dismissOverlays(page);
+      await this.handleCaptchaAndPopups(page);
+      await page.waitForTimeout(1000);
+
+      isDisabled = await page.evaluate(() => {
+        const tb = document.querySelector(
+          'div[role="textbox"].ql-editor, rich-textarea div[role="textbox"], div[contenteditable="true"]'
+        );
+        if (!tb) return false;
+        const isFieldsetDisabled = !!tb.closest('fieldset[disabled]');
+        const isContentEditableFalse = tb.getAttribute('contenteditable') === 'false';
+        return isFieldsetDisabled || isContentEditableFalse;
+      });
+
+      if (isDisabled) {
+        throw new Error(
+          "Gemini input textbox is disabled (account usage limit or disabled input area)."
+        );
+      }
     }
 
     // Safely focus textbox without failing on overlay pointer interception
@@ -780,7 +823,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
     // Count existing responses and record current text to detect when new turn arrives
     const { initialResponseCount, initialLatestText } = await page.evaluate(() => {
       const responseEls = document.querySelectorAll(
-        'message-content, .model-response, [data-test-id="model-response"]'
+        'message-content, assistant-messages-primary, .model-response, [data-test-id="model-response"], .remy-container'
       );
       const count = responseEls.length;
       let text = "";
@@ -819,6 +862,29 @@ export class GeminiWebClient implements GeminiGenerationClient {
       await page.keyboard.press("Enter");
     }
 
+    // In Task mode, Google may display .spark-onboarding-fre-panel upon sending the prompt
+    await page.waitForTimeout(600);
+    const postSendContinue = page
+      .locator(
+        '.spark-onboarding-fre-panel button, mat-dialog-container button, button:has-text("Tiếp tục"), button:has-text("Continue")'
+      )
+      .last();
+    if (await postSendContinue.isVisible({ timeout: 1500 }).catch(() => false)) {
+      console.log(`[GeminiWeb] ✓ Task mode onboarding dialog detected post-send. Clicking "Tiếp tục"...`);
+      await postSendContinue.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(800);
+      const reSendBtn = page
+        .locator(
+          'button[aria-label*="Gửi tin nhắn"], button[aria-label*="Send message"], button[aria-label*="Send"], button[aria-label*="Gửi"], button.send-button'
+        )
+        .first();
+      if (await reSendBtn.isVisible({ timeout: 1000 }).catch(() => false) && await reSendBtn.isEnabled().catch(() => false)) {
+        await reSendBtn.click({ force: true }).catch(() => {});
+      } else {
+        await page.keyboard.press("Enter").catch(() => {});
+      }
+    }
+
     // Wait for response generation to start
     const timeoutMs = this.config.timeoutMs || 180_000;
     const startTime = Date.now();
@@ -832,7 +898,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
           if (stopBtn) return true;
 
           const responseEls = document.querySelectorAll(
-            'message-content, .model-response, [data-test-id="model-response"]'
+            'message-content, assistant-messages-primary, .model-response, [data-test-id="model-response"], .remy-container'
           );
           if (responseEls.length > initCount) return true;
           if (responseEls.length > 0) {
@@ -864,7 +930,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
         const isGenerating = !!stopBtn;
 
         const responseEls = document.querySelectorAll(
-          'message-content, .model-response, [data-test-id="model-response"]'
+          'message-content, assistant-messages-primary, .model-response, [data-test-id="model-response"], .remy-container'
         );
         let latestText = "";
         if (responseEls.length > 0) {
@@ -906,8 +972,15 @@ export class GeminiWebClient implements GeminiGenerationClient {
 
     // Extract latest response text
     const extracted = await page.evaluate(() => {
+      // Prioritize standard message-content first
+      const msgEls = document.querySelectorAll('message-content');
+      if (msgEls.length > 0) {
+        const last = msgEls[msgEls.length - 1] as HTMLElement;
+        const txt = (last.innerText || "").trim();
+        if (txt.length > 0) return txt;
+      }
       const responseEls = document.querySelectorAll(
-        'message-content, .model-response, [data-test-id="model-response"]'
+        'assistant-messages-primary, .model-response, [data-test-id="model-response"], .remy-container'
       );
       if (responseEls.length === 0) {
         return "";
@@ -1578,6 +1651,18 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
 
       if (isAlreadyActive) {
         console.log(`[GeminiWeb] ✓ Segmented mode already on "${isTask ? "Nhiệm vụ" : "Cuộc trò chuyện"}"`);
+        if (isTask) {
+          const continueBtn = page
+            .locator(
+              '.spark-onboarding-fre-panel button, mat-dialog-container button, button:has-text("Tiếp tục"), button:has-text("Continue")'
+            )
+            .last();
+          if (await continueBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+            console.log(`[GeminiWeb] ✓ Task mode onboarding dialog detected. Clicking "Tiếp tục"...`);
+            await continueBtn.click({ force: true }).catch(() => {});
+            await page.waitForTimeout(600);
+          }
+        }
         return;
       }
 
@@ -1594,6 +1679,18 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
         await btn.click({ force: true });
         await page.waitForTimeout(600);
         console.log(`[GeminiWeb] ✓ Segmented mode configured to "${isTask ? "Nhiệm vụ" : "Cuộc trò chuyện"}"`);
+        if (isTask) {
+          const continueBtn = page
+            .locator(
+              '.spark-onboarding-fre-panel button, mat-dialog-container button, button:has-text("Tiếp tục"), button:has-text("Continue")'
+            )
+            .last();
+          if (await continueBtn.isVisible({ timeout: 2500 }).catch(() => false)) {
+            console.log(`[GeminiWeb] ✓ Task mode onboarding dialog detected. Clicking "Tiếp tục"...`);
+            await continueBtn.click({ force: true }).catch(() => {});
+            await page.waitForTimeout(800);
+          }
+        }
       }
     } catch (err: any) {
       console.warn(`[GeminiWeb] Segmented mode selection notice: ${err?.message || err}`);
