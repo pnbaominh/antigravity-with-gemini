@@ -164,7 +164,7 @@ export async function pairCommand(workspaceRoot: string) {
   console.log(pc.dim("Valid for 5 minutes. Enter this code in your Gemini connector settings.\n"));
 }
 
-export async function loginWebCommand(workspaceRoot: string) {
+export async function loginWebCommand(workspaceRoot: string, options?: { add?: boolean }) {
   console.log(pc.bold("\n🌐 Google Gemini Web Login\n"));
   const webClient = new GeminiWebClient();
   try {
@@ -172,14 +172,94 @@ export async function loginWebCommand(workspaceRoot: string) {
     console.log(pc.cyan(`Using Chromium Browser: ${executable}`));
     console.log(pc.dim(`Profile Directory: ${webClient.getUserDataDir()}`));
 
-    await webClient.startInteractiveLogin((msg) => {
-      console.log(pc.yellow(msg));
+    if (options?.add) {
+      console.log(pc.magenta("➕ Adding an additional Google Account to Brave profile..."));
+    }
+
+    await webClient.startInteractiveLogin({
+      addAccount: options?.add,
+      onProgress: (msg) => {
+        console.log(pc.yellow(msg));
+      },
     });
 
     console.log(pc.green("\n✓ Google Gemini Web session established and saved successfully!"));
-    console.log(pc.white("Now you can run `g2a plan` or call `gemini_plan` without any API keys or quota limits.\n"));
+
+    const state = webClient.accountManager.getState();
+    if (state.accounts.length > 0) {
+      console.log(pc.bold("\nConfigured Google Accounts in Brave:"));
+      for (const acc of state.accounts) {
+        const isActive = acc.index === state.activeAccountIndex;
+        const status = acc.hasLimitReached
+          ? pc.red(`(Hạn mức đã hết - Reset: ${acc.resetTime || 'sớm nhất'})`)
+          : pc.green("(Sẵn sàng / Ready)");
+        console.log(
+          `  [${acc.index}] ${acc.name ? acc.name + " - " : ""}${acc.email} ${isActive ? pc.cyan("[ACTIVE]") : ""} ${status}`
+        );
+      }
+      if (state.accounts.length === 1) {
+        console.log(pc.dim("\nTip: Để đăng nhập thêm tài khoản phụ tự động chuyển đổi khi hết hạn mức:"));
+        console.log(pc.cyan("  g2a login-web --add\n"));
+      } else {
+        console.log(pc.green(`\n✓ Cơ chế tự động luân chuyển giữa ${state.accounts.length} tài khoản đang hoạt động!\n`));
+      }
+    }
   } catch (err: any) {
     console.error(pc.red(`\nLogin failed: ${err?.message || err}\n`));
+  } finally {
+    await webClient.close();
+  }
+}
+
+export async function accountsCommand(workspaceRoot: string) {
+  console.log(pc.bold("\n👥 Google Accounts & Usage Status\n"));
+  const webClient = new GeminiWebClient();
+  try {
+    const cachedState = webClient.accountManager.getState();
+    if (cachedState.accounts.length > 0) {
+      console.log(pc.cyan(`Đang quét và kiểm tra trạng thái các tài khoản Google trong Brave...`));
+    } else {
+      console.log(pc.cyan("Đang phát hiện danh sách tài khoản Google đăng nhập trong Brave..."));
+    }
+
+    const page = await webClient.getPage(false);
+    await webClient.accountManager.discoverAccounts(
+      page,
+      (p) => webClient.handleCaptchaAndPopups(p),
+      (acc) => {
+        const planText = acc.plan ? ` [${acc.plan}]` : "";
+        console.log(pc.dim(`  + Nhận diện tài khoản [Index ${acc.index}]: ${acc.email}${planText}`));
+      }
+    );
+
+    const state = webClient.accountManager.getState();
+
+    console.log(pc.bold("\nDanh sách tài khoản Google trong Brave Gemini:"));
+    for (const acc of state.accounts) {
+      const isActive = acc.index === state.activeAccountIndex;
+      const status = acc.hasLimitReached
+        ? pc.red(`[HẠN MỨC ĐÃ HẾT] - Reset: ${acc.resetTime || 'chờ reset'}`)
+        : pc.green("[HOẠT ĐỘNG / QUOTA OK]");
+      const planBadge = acc.plan ? pc.yellow(`[${acc.plan}] `) : "";
+      const indicator = isActive ? pc.cyan("● [ACTIVE]") : pc.dim("○ [STANDBY]");
+      console.log(
+        `  ${indicator} [Index ${acc.index}] ${planBadge}${acc.name ? acc.name + " - " : ""}${acc.email} ${status}`
+      );
+    }
+
+    if (state.accounts.length === 0) {
+      console.log(pc.yellow("  Chưa có tài khoản nào được ghi nhận. Vui lòng chạy `g2a login-web`."));
+    } else if (state.accounts.length === 1) {
+      console.log(pc.yellow("\n⚠️ Bạn hiện chỉ có 1 tài khoản đăng nhập trên Brave."));
+      console.log(pc.white("Để tự động đổi sang nick khác khi hết usage, hãy thêm tài khoản bằng:"));
+      console.log(pc.cyan("  g2a login-web --add"));
+    } else {
+      console.log(pc.green(`\n✓ Hệ thống đã kích hoạt cơ chế tự động chuyển đổi giữa ${state.accounts.length} tài khoản Google!`));
+      console.log(pc.dim(`Khi tài khoản đang dùng đạt giới hạn lượt dùng, Antigravity sẽ tự động chuyển sang tài khoản kế tiếp mà không làm gián đoạn công việc.`));
+    }
+    console.log();
+  } catch (err: any) {
+    console.error(pc.red(`Error checking accounts: ${err?.message || err}\n`));
   } finally {
     await webClient.close();
   }

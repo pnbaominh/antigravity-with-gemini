@@ -2,7 +2,9 @@ import { chromium, type BrowserContext, type Page } from "playwright-core";
 import path from "path";
 import os from "os";
 import fs from "fs";
+import { execSync } from "child_process";
 import { BrowserDetector } from "./detector.js";
+import { GoogleAccountManager } from "./account-manager.js";
 import type { GeminiGenerationClient } from "../gemini/client-interface.js";
 import { PromptSanitizer } from "../gemini/prompt-sanitizer.js";
 import { cleanupBrowserSingletonLocks } from "../utils/platform.js";
@@ -106,6 +108,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
   private defaultUserDataDir: string;
   private mutex = new AsyncMutex();
   private circuitBreaker = new WebEngineCircuitBreaker();
+  public accountManager: GoogleAccountManager;
 
   constructor(config: WebClientConfig = {}) {
     this.defaultUserDataDir = path.join(os.homedir(), ".g2a", "browser_profile");
@@ -117,6 +120,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
       browserPath: config.browserPath,
       preferredModel: config.preferredModel || process.env.GEMINI_MODEL || "4 Argon",
     };
+    this.accountManager = new GoogleAccountManager(path.dirname(this.getUserDataDir()));
   }
 
   public getUserDataDir(): string {
@@ -167,7 +171,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
 
       const headless = forceHeaded ? false : (this.config.headless ?? false);
 
-      this.context = await chromium.launchPersistentContext(userDataDir, {
+      const launchOptions = {
         executablePath,
         headless,
         viewport: { width: 1280, height: 900 },
@@ -177,7 +181,28 @@ export class GeminiWebClient implements GeminiGenerationClient {
           "--no-default-browser-check",
         ],
         ignoreDefaultArgs: ["--enable-automation"],
-      });
+      };
+
+      try {
+        this.context = await chromium.launchPersistentContext(userDataDir, launchOptions);
+      } catch (err: any) {
+        if (err?.message?.includes("ProcessSingleton")) {
+          console.warn("[GeminiWeb] Stale browser process detected holding profile lock. Reclaiming profile lock...");
+          if (process.platform === "win32") {
+            try {
+              execSync("taskkill /IM brave.exe /F", { stdio: "ignore" });
+            } catch {}
+            try {
+              execSync("taskkill /IM chrome.exe /F", { stdio: "ignore" });
+            } catch {}
+          }
+          await new Promise((r) => setTimeout(r, 1000));
+          await cleanupBrowserSingletonLocks(userDataDir);
+          this.context = await chromium.launchPersistentContext(userDataDir, launchOptions);
+        } else {
+          throw err;
+        }
+      }
 
       const pages = this.context.pages();
       this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
@@ -226,6 +251,47 @@ export class GeminiWebClient implements GeminiGenerationClient {
       if (await dismissBtn.isVisible()) {
         await dismissBtn.click();
         await page.waitForTimeout(500);
+      }
+    } catch {}
+  }
+
+  /**
+   * Returns the correct URL for the currently active Google account index:
+   * Index 0 -> https://gemini.google.com/app
+   * Index 1 -> https://gemini.google.com/u/1/app
+   * Index 2 -> https://gemini.google.com/u/2/app
+   * etc.
+   */
+  public getAppUrl(subPath = "app"): string {
+    const activeIndex = this.accountManager?.getState()?.activeAccountIndex ?? 0;
+    if (activeIndex > 0) {
+      return `https://gemini.google.com/u/${activeIndex}/${subPath}`;
+    }
+    return `https://gemini.google.com/${subPath}`;
+  }
+
+  /**
+   * Dismisses any active overlay backdrops (.cdk-overlay-backdrop) or dialogs that intercept pointer events.
+   */
+  public async dismissOverlays(page: Page): Promise<void> {
+    if (!page || page.isClosed()) return;
+    try {
+      const hasBackdrop = await page.evaluate(() => {
+        const backdrops = document.querySelectorAll(
+          '.cdk-overlay-backdrop-showing, .cdk-overlay-backdrop'
+        );
+        return backdrops.length > 0;
+      });
+      if (hasBackdrop) {
+        await page.keyboard.press("Escape").catch(() => {});
+        await page.waitForTimeout(200);
+        await page.evaluate(() => {
+          document
+            .querySelectorAll('.cdk-overlay-backdrop-showing, .cdk-overlay-backdrop')
+            .forEach((el) => {
+              (el as HTMLElement).style.pointerEvents = 'none';
+            });
+        });
       }
     } catch {}
   }
@@ -300,62 +366,90 @@ export class GeminiWebClient implements GeminiGenerationClient {
 
   /**
    * Interactive login helper: Opens headed browser and waits until user logs into Google.
+   * Supports logging into the primary account or adding additional accounts (--add).
    */
   public async startInteractiveLogin(
-    onProgress?: (msg: string) => void
+    onProgressOrOptions?:
+      | ((msg: string) => void)
+      | { addAccount?: boolean; onProgress?: (msg: string) => void }
   ): Promise<boolean> {
-    const log = onProgress || console.log;
-    log("Opening browser window for Google Gemini Web login...");
+    const isOptionsObj =
+      typeof onProgressOrOptions === "object" && onProgressOrOptions !== null;
+    const isAddAccount = isOptionsObj ? (onProgressOrOptions as any).addAccount === true : false;
+    const log =
+      (isOptionsObj ? (onProgressOrOptions as any).onProgress : onProgressOrOptions) ||
+      console.log;
+
+    if (isAddAccount) {
+      log("Opening browser window to add an additional Google Account...");
+    } else {
+      log("Opening browser window for Google Gemini Web login...");
+    }
 
     const page = await this.getPage(true);
-    try {
-      await page.goto("https://gemini.google.com/app", {
-        waitUntil: "domcontentloaded",
-        timeout: 60_000,
-      });
-    } catch {
-      // Ignore transient initial load timeouts
-    }
 
-    // Check if already authenticated
-    await page.waitForTimeout(2000);
-    const alreadyAuth = await this.isUserAuthenticated();
-    if (alreadyAuth) {
-      log("✓ Google Gemini Web session already active!");
-      return true;
-    }
-
-    // Direct user straight to Google Account sign-in page without breaking on redirect
-    log("Redirecting to Google Account Sign In...");
-    try {
-      const clicked = await page.evaluate(() => {
-        const links = Array.from(document.querySelectorAll("a, button"));
-        const btn = links.find((el) => {
-          const t = (el.textContent || "").trim().toLowerCase();
-          const href = (el.getAttribute("href") || "").toLowerCase();
-          return (
-            t === "sign in" ||
-            t === "đăng nhập" ||
-            href.includes("accounts.google.com/servicelogin") ||
-            href.includes("servicelogin")
-          );
-        }) as HTMLElement | undefined;
-
-        if (btn) {
-          btn.click();
-          return true;
-        }
-        return false;
-      });
-
-      if (!clicked) {
+    if (isAddAccount) {
+      log("Navigating to Google Add Account session (accounts.google.com/AddSession)...");
+      try {
         await page.goto(
-          "https://accounts.google.com/v3/signin/identifier?continue=https://gemini.google.com/app",
-          { waitUntil: "commit", timeout: 30_000 }
+          "https://accounts.google.com/AddSession?continue=https://gemini.google.com/app",
+          { waitUntil: "commit", timeout: 45_000 }
         );
+      } catch {}
+    } else {
+      try {
+        await page.goto("https://gemini.google.com/app", {
+          waitUntil: "domcontentloaded",
+          timeout: 60_000,
+        });
+      } catch {
+        // Ignore transient initial load timeouts
       }
-    } catch {
-      // Redirection between Google sign-in services is expected
+
+      // Check if already authenticated
+      await page.waitForTimeout(2000);
+      const alreadyAuth = await this.isUserAuthenticated();
+      if (alreadyAuth) {
+        log("✓ Google Gemini Web session already active!");
+        log("Scanning logged-in Google Accounts in browser...");
+        await this.accountManager.discoverAccounts(page, (p) => this.handleCaptchaAndPopups(p), (a) => {
+          log(`  + Detected Google Account [${a.index}]: ${a.email}`);
+        });
+        return true;
+      }
+
+      // Direct user straight to Google Account sign-in page without breaking on redirect
+      log("Redirecting to Google Account Sign In...");
+      try {
+        const clicked = await page.evaluate(() => {
+          const links = Array.from(document.querySelectorAll("a, button"));
+          const btn = links.find((el) => {
+            const t = (el.textContent || "").trim().toLowerCase();
+            const href = (el.getAttribute("href") || "").toLowerCase();
+            return (
+              t === "sign in" ||
+              t === "đăng nhập" ||
+              href.includes("accounts.google.com/servicelogin") ||
+              href.includes("servicelogin")
+            );
+          }) as HTMLElement | undefined;
+
+          if (btn) {
+            btn.click();
+            return true;
+          }
+          return false;
+        });
+
+        if (!clicked) {
+          await page.goto(
+            "https://accounts.google.com/v3/signin/identifier?continue=https://gemini.google.com/app",
+            { waitUntil: "commit", timeout: 30_000 }
+          );
+        }
+      } catch {
+        // Redirection between Google sign-in services is expected
+      }
     }
 
     log("Please enter your Google email and password in the opened browser window.");
@@ -391,6 +485,10 @@ export class GeminiWebClient implements GeminiGenerationClient {
           log("✓ Google login complete! Session verified and saved to .g2a/browser_profile.");
           // Wait 3 seconds so cookies are flushed to disk
           await page.waitForTimeout(3000);
+          log("Scanning logged-in Google Accounts in browser...");
+          await this.accountManager.discoverAccounts(page, (p) => this.handleCaptchaAndPopups(p), (a) => {
+            log(`  + Registered Google Account [${a.index}]: ${a.email}`);
+          });
           return true;
         }
       }
@@ -417,11 +515,12 @@ export class GeminiWebClient implements GeminiGenerationClient {
     const isContinuing = options?.continueConversation === true;
 
     if (!isContinuing) {
-      // Ensure we start in a fresh conversation on Gemini Web (https://gemini.google.com/app)
+      // Ensure we start in a fresh conversation on the active account's Gemini Web app
+      const targetAppUrl = this.getAppUrl();
       const currentUrl = page.url();
       const isAlreadyOnFreshApp =
-        currentUrl === "https://gemini.google.com/app" ||
-        currentUrl === "https://gemini.google.com/app/";
+        currentUrl === targetAppUrl ||
+        currentUrl === `${targetAppUrl}/`;
 
       if (!isAlreadyOnFreshApp) {
         let clickedNewChat = false;
@@ -432,17 +531,17 @@ export class GeminiWebClient implements GeminiGenerationClient {
             )
             .first();
           if (await newChatBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
-            await newChatBtn.click();
+            await newChatBtn.click({ force: true });
             await page.waitForTimeout(1500);
             clickedNewChat =
-              page.url() === "https://gemini.google.com/app" ||
-              page.url() === "https://gemini.google.com/app/";
+              page.url() === targetAppUrl ||
+              page.url() === `${targetAppUrl}/`;
           }
         } catch {}
 
         if (!clickedNewChat) {
-          console.log("[GeminiWeb] Resetting to fresh conversation: https://gemini.google.com/app");
-          await page.goto("https://gemini.google.com/app", {
+          console.log(`[GeminiWeb] Resetting to fresh conversation: ${targetAppUrl}`);
+          await page.goto(targetAppUrl, {
             waitUntil: "domcontentloaded",
             timeout: 45_000,
           });
@@ -451,6 +550,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
       }
 
       await this.handleCaptchaAndPopups(page);
+      await this.dismissOverlays(page);
 
       // Check login
       const isLoggedIn = await this.isUserAuthenticated();
@@ -460,8 +560,39 @@ export class GeminiWebClient implements GeminiGenerationClient {
         );
       }
 
-      // 1. Select segmented mode FIRST (Default to "Nhiệm vụ" / Task mode for structured implementation plans)
-      const targetSegment = (options as any)?.segmentedMode || "task";
+      // Proactive Usage Limit Check & Auto-Switch to another Google Account
+      const limitStatus = await this.accountManager.checkUsageLimit(page);
+      if (limitStatus.hasLimitReached) {
+        console.warn(
+          `[GeminiWeb] ⚠️ Current account (${limitStatus.accountEmail || "index " + limitStatus.accountIndex}) has reached its usage limit (${limitStatus.reason || "Quota Exhausted"}).`
+        );
+        if (limitStatus.resetTime) {
+          console.warn(`[GeminiWeb] Limit resets at: ${limitStatus.resetTime}`);
+        }
+        console.log(`[GeminiWeb] 🔄 Auto-switching to next Google account in browser profile...`);
+
+        const switchResult = await this.accountManager.switchToNextAccount(page, (p) =>
+          this.handleCaptchaAndPopups(p)
+        );
+        if (!switchResult.success) {
+          throw new Error(
+            `[GeminiWeb Quota Exceeded] Tài khoản Google (${limitStatus.accountEmail || "hiện tại"}) đã hết hạn mức sử dụng (Usage limit reached).\n` +
+            `Hệ thống không tìm thấy tài khoản Google dự phòng nào khả dụng trong trình duyệt Brave.\n` +
+            `👉 Hướng dẫn: Bạn có thể đăng nhập thêm 1 hoặc nhiều tài khoản Google khác để tự động luân chuyển khi hết hạn mức:\n` +
+            `  1. Chạy lệnh: g2a login-web --add\n` +
+            `  2. Hoặc mở Brave trên trang Gemini, nhấn avatar góc dưới bên trái -> 'Thêm tài khoản khác' (Add another account).\n` +
+            `Hạn mức của nick này sẽ đặt lại lúc: ${limitStatus.resetTime || "theo quy định của Google"}.`
+          );
+        }
+
+        console.log(
+          `[GeminiWeb] ✓ Successfully switched to Google account: ${switchResult.account?.email} (Account index [${switchResult.account?.index}])`
+        );
+        await page.waitForTimeout(2000);
+      }
+
+      // 1. Select segmented mode FIRST (Default to "Cuộc trò chuyện" / Chat mode for fast, responsive generation)
+      const targetSegment = (options as any)?.segmentedMode || "chat";
       await this.ensureSegmentedMode(page, targetSegment);
 
       // 2. Ensure target model (prioritize newest: 4 Argon > 3.8 Flash > 3.1 Pro > 3.5 Flash-Lite) is selected
@@ -500,6 +631,41 @@ export class GeminiWebClient implements GeminiGenerationClient {
     }
 
     const extracted = await this.submitAndExtract(page, fullPrompt);
+
+    // Check if usage limit was triggered during or after generation
+    const limitCheckPost = await this.accountManager.checkUsageLimit(page);
+    const textLimitCheck = this.accountManager.isUsageLimitText(extracted || "");
+
+    if (limitCheckPost.hasLimitReached || textLimitCheck.reached) {
+      console.warn(
+        `[GeminiWeb] ⚠️ Account reached usage limit during prompt execution (${textLimitCheck.reason || limitCheckPost.reason || "Quota Exceeded"}).`
+      );
+      console.log(`[GeminiWeb] 🔄 Auto-switching to next Google account and retrying prompt...`);
+      const switchResult = await this.accountManager.switchToNextAccount(page, (p) =>
+        this.handleCaptchaAndPopups(p)
+      );
+      if (switchResult.success) {
+        console.log(
+          `[GeminiWeb] ✓ Successfully switched to Google account: ${switchResult.account?.email}. Re-submitting prompt on fresh account session...`
+        );
+        await this.resetToFreshChat(page);
+        const targetSegment = (options as any)?.segmentedMode || "chat";
+        await this.ensureSegmentedMode(page, targetSegment);
+        await this.ensureBestModel(page, activeModel);
+        const retryResult = await this.submitAndExtract(page, fullPrompt);
+        if (retryResult && !this.isBackendError(retryResult)) {
+          return {
+            text: retryResult,
+            model: activeModel,
+          };
+        }
+      } else {
+        throw new Error(
+          `[GeminiWeb Quota Exceeded] Tài khoản Google đã hết hạn mức sử dụng và không còn tài khoản dự phòng khả dụng.\n` +
+          `Vui lòng đăng nhập thêm tài khoản phụ bằng: g2a login-web --add`
+        );
+      }
+    }
 
     const isError =
       !extracted ||
@@ -553,14 +719,18 @@ export class GeminiWebClient implements GeminiGenerationClient {
         )
         .first();
       if (await newChatBtn.isVisible()) {
-        await newChatBtn.click();
+        await newChatBtn.click({ force: true });
         await page.waitForTimeout(2000);
+        await this.dismissOverlays(page);
         return;
       }
     } catch {}
     try {
-      await page.goto("https://gemini.google.com/app", { waitUntil: "domcontentloaded" });
+      const targetUrl = this.getAppUrl();
+      console.log(`[GeminiWeb] Resetting to fresh conversation: ${targetUrl}`);
+      await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(2500);
+      await this.dismissOverlays(page);
     } catch {}
   }
 
@@ -568,11 +738,38 @@ export class GeminiWebClient implements GeminiGenerationClient {
    * Submits prompt text to chat input and waits for generation to stabilize.
    */
   public async submitAndExtract(page: Page, promptText: string): Promise<string> {
+    await this.dismissOverlays(page);
+
     const inputSelector =
       'div[role="textbox"].ql-editor, rich-textarea div[role="textbox"], div[contenteditable="true"], div[role="textbox"]';
     const textbox = page.locator(inputSelector).first();
-    await textbox.waitFor({ timeout: 15_000 });
-    await textbox.click();
+    await textbox.waitFor({ state: "attached", timeout: 15_000 });
+
+    // Verify textbox is not disabled by fieldset[disabled] or contenteditable="false"
+    const isDisabled = await page.evaluate(() => {
+      const tb = document.querySelector(
+        'div[role="textbox"].ql-editor, rich-textarea div[role="textbox"], div[contenteditable="true"]'
+      );
+      if (!tb) return false;
+      const isFieldsetDisabled = !!tb.closest('fieldset[disabled]');
+      const isContentEditableFalse = tb.getAttribute('contenteditable') === 'false';
+      return isFieldsetDisabled || isContentEditableFalse;
+    });
+
+    if (isDisabled) {
+      throw new Error(
+        "Gemini input textbox is disabled (account usage limit or disabled input area)."
+      );
+    }
+
+    // Safely focus textbox without failing on overlay pointer interception
+    await textbox.focus().catch(() => {});
+    await textbox.click({ force: true, timeout: 3000 }).catch(async () => {
+      await page.evaluate((sel) => {
+        const el = document.querySelector(sel) as HTMLElement;
+        if (el) el.focus();
+      }, inputSelector);
+    });
     await page.waitForTimeout(300);
 
     // Clear any residual draft in the input box
@@ -609,7 +806,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
       if (await sendButton.isVisible({ timeout: 2000 })) {
         for (let i = 0; i < 10; i++) {
           if (await sendButton.isEnabled()) {
-            await sendButton.click();
+            await sendButton.click({ force: true });
             sent = true;
             break;
           }
@@ -726,6 +923,9 @@ export class GeminiWebClient implements GeminiGenerationClient {
    * Checks if extracted text is a known backend/safety refusal from Gemini Web.
    */
   public isBackendError(text: string): boolean {
+    if (this.accountManager && this.accountManager.isUsageLimitText(text).reached) {
+      return true;
+    }
     const lower = text.toLowerCase();
     return (
       lower.includes("encountered an error doing what you asked") ||
@@ -825,7 +1025,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
     try {
       console.warn(`[GeminiWeb Bypass] Tier 1: Applying Architectural RFC safe-framing on ${initialModel}...`);
       await this.resetToFreshChat(page);
-      await this.ensureSegmentedMode(page, "task");
+      await this.ensureSegmentedMode(page, "chat");
       await this.ensureBestModel(page, initialModel);
 
       const tier1Prompt = isVN
@@ -915,7 +1115,7 @@ Directly begin your response with "# Plan: [Title]". Do not output any conversat
     try {
       console.warn(`[GeminiWeb Bypass] Tier 2: Applying Structural Inversion (Schema & Type Audit) on ${initialModel}...`);
       await this.resetToFreshChat(page);
-      await this.ensureSegmentedMode(page, "task");
+      await this.ensureSegmentedMode(page, "chat");
       await this.ensureBestModel(page, initialModel);
 
       const tier2Prompt = isVN
@@ -1004,7 +1204,7 @@ Directly begin with "# Plan:".`;
     try {
       console.warn(`[GeminiWeb Bypass] Tier 3: Autonomous model rotation -> Switching to ${alternateModel}...`);
       await this.resetToFreshChat(page);
-      await this.ensureSegmentedMode(page, "task");
+      await this.ensureSegmentedMode(page, "chat");
       await this.ensureBestModel(page, alternateModel);
 
       const tier3Prompt = isVN
@@ -1094,7 +1294,7 @@ Directly begin with "# Plan: [Title]".`;
     try {
       console.warn(`[GeminiWeb Bypass] Tier 4: Autonomous fallback to 3.5 Flash-Lite...`);
       await this.resetToFreshChat(page);
-      await this.ensureSegmentedMode(page, "task");
+      await this.ensureSegmentedMode(page, "chat");
       await this.ensureBestModel(page, "3.5 Flash-Lite");
 
       const tier4Prompt = `Kế hoạch kiến trúc phần mềm và đặc tả triển khai kỹ thuật cho: ${sanitized.sanitizedTask}.
@@ -1147,13 +1347,15 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
         targetKey = "4.0";
       }
 
-      // 1. Focus input area so bottom toolbar and model selector are visible
+      // 1. Safely focus input area so bottom toolbar and model selector are visible
+      await this.dismissOverlays(page);
       const textbox = page.locator(
         'div[role="textbox"].ql-editor, rich-textarea div[role="textbox"], div[contenteditable="true"]'
       ).first();
       if (await textbox.isVisible().catch(() => false)) {
-        await textbox.click();
-        await page.waitForTimeout(400);
+        await textbox.focus().catch(() => {});
+        await textbox.click({ force: true, timeout: 2000 }).catch(() => {});
+        await page.waitForTimeout(300);
       }
 
       // 2. Locate the model picker button with highest specificity
@@ -1248,11 +1450,7 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
       }
 
       // 6. Dismiss any lingering overlay backdrop
-      const backdrop = page.locator('.cdk-overlay-backdrop-showing').first();
-      if (await backdrop.isVisible().catch(() => false)) {
-        await page.keyboard.press("Escape").catch(() => {});
-        await page.waitForTimeout(300);
-      }
+      await this.dismissOverlays(page);
 
       // 7. Verify model switched to target. If not, retry up to 2 times
       let postText = (await modeBtn.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
@@ -1290,13 +1488,8 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
             (match as HTMLElement).click();
           }
         }, targetKey);
-        await page.waitForTimeout(800);
-
-        const backdropRetry = page.locator('.cdk-overlay-backdrop-showing').first();
-        if (await backdropRetry.isVisible().catch(() => false)) {
-          await page.keyboard.press("Escape").catch(() => {});
-          await page.waitForTimeout(200);
-        }
+        await page.waitForTimeout(600);
+        await this.dismissOverlays(page);
 
         postText = (await modeBtn.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
         postAria = (await modeBtn.getAttribute("aria-label").catch(() => "")) || "";
@@ -1360,7 +1553,7 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
    * Selects between "Nhiệm vụ" (Task Mode - optimized for structured engineering plans)
    * and "Cuộc trò chuyện" (Chat Mode - for general open discussion).
    */
-  public async ensureSegmentedMode(page: Page, mode: "task" | "chat" = "task"): Promise<void> {
+  public async ensureSegmentedMode(page: Page, mode: "task" | "chat" = "chat"): Promise<void> {
     try {
       const isTask = mode === "task";
 

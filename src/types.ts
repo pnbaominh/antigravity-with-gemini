@@ -170,3 +170,37 @@ export const SearchCodeToolInputSchema = z.object({
 });
 
 export type SearchCodeToolInput = z.infer<typeof SearchCodeToolInputSchema>;
+
+// ============================================================================
+// 5. GOOGLE ACCOUNT & USAGE POOL CONTRACTS
+// ============================================================================
+
+export const GoogleAccountInfoSchema = z.object({
+  index: z.number().int().min(0),
+  email: z.string().min(3),
+  name: z.string().optional(),
+  plan: z.string().optional(),
+  hasLimitReached: z.boolean().default(false),
+  resetTime: z.string().nullable().optional(),
+  lastCheckedMs: z.number().int().optional(),
+});
+
+export type GoogleAccountInfo = z.infer<typeof GoogleAccountInfoSchema>;
+
+export const UsageLimitStatusSchema = z.object({
+  hasLimitReached: z.boolean(),
+  accountEmail: z.string().optional(),
+  accountIndex: z.number().int().optional(),
+  resetTime: z.string().nullable().optional(),
+  reason: z.string().optional(),
+});
+
+export type UsageLimitStatus = z.infer<typeof UsageLimitStatusSchema>;
+
+export const AccountPoolStateSchema = z.object({
+  activeAccountIndex: z.number().int().min(0).default(0),
+  accounts: z.array(GoogleAccountInfoSchema).default([]),
+});
+
+export type AccountPoolState = z.infer<typeof AccountPoolStateSchema>;
+

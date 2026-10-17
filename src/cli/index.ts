@@ -16,6 +16,7 @@ import {
   webCommand,
   modelsCommand,
   askCommand,
+  accountsCommand,
 } from "./commands.js";
 import { runDoctorChecks, printDoctorReport } from "./doctor.js";
 import { BridgeServer } from "../bridge/server.js";
@@ -107,9 +108,18 @@ program
 program
   .command("login-web")
   .description("Launch browser to sign in to Google Gemini Web and save persistent session")
+  .option("-a, --add", "Add an additional Google account to the Brave session")
+  .action(async (options) => {
+    const ws = path.resolve(program.opts().workspace);
+    await loginWebCommand(ws, options);
+  });
+
+program
+  .command("accounts")
+  .description("List logged-in Google accounts and check usage limit / quota status")
   .action(async () => {
     const ws = path.resolve(program.opts().workspace);
-    await loginWebCommand(ws);
+    await accountsCommand(ws);
   });
 
 program
