@@ -449,17 +449,17 @@ export class GeminiWebClient implements GeminiGenerationClient {
         );
       }
 
-      // Ensure target model (prioritize 4 Argon > 3.8 Flash > 3.1 Pro > 3.5 Flash-Lite) is selected
+      // 1. Select segmented mode FIRST (Default to "Nhiệm vụ" / Task mode for structured implementation plans)
+      const targetSegment = (options as any)?.segmentedMode || "task";
+      await this.ensureSegmentedMode(page, targetSegment);
+
+      // 2. Ensure target model (prioritize newest: 4 Argon > 3.8 Flash > 3.1 Pro > 3.5 Flash-Lite) is selected
       const activeModel =
         options?.model ||
         this.config.preferredModel ||
         process.env.GEMINI_MODEL ||
         "4 Argon";
       await this.ensureBestModel(page, activeModel);
-
-      // Select segmented mode (Default to "Nhiệm vụ" / Task mode for structured implementation plans)
-      const targetSegment = (options as any)?.segmentedMode || "task";
-      await this.ensureSegmentedMode(page, targetSegment);
     } else {
       // Continuing conversation in the EXACT SAME CHAT THREAD:
       // Absolutely NO clicking "Cuộc trò chuyện mới" / "New chat", NO navigation, NO page reload!
@@ -811,6 +811,7 @@ export class GeminiWebClient implements GeminiGenerationClient {
     try {
       console.warn(`[GeminiWeb Bypass] Tier 1: Applying Architectural RFC safe-framing on ${initialModel}...`);
       await this.resetToFreshChat(page);
+      await this.ensureSegmentedMode(page, "task");
       await this.ensureBestModel(page, initialModel);
 
       const tier1Prompt = isVN
@@ -900,6 +901,7 @@ Directly begin your response with "# Plan: [Title]". Do not output any conversat
     try {
       console.warn(`[GeminiWeb Bypass] Tier 2: Applying Structural Inversion (Schema & Type Audit) on ${initialModel}...`);
       await this.resetToFreshChat(page);
+      await this.ensureSegmentedMode(page, "task");
       await this.ensureBestModel(page, initialModel);
 
       const tier2Prompt = isVN
@@ -988,6 +990,7 @@ Directly begin with "# Plan:".`;
     try {
       console.warn(`[GeminiWeb Bypass] Tier 3: Autonomous model rotation -> Switching to ${alternateModel}...`);
       await this.resetToFreshChat(page);
+      await this.ensureSegmentedMode(page, "task");
       await this.ensureBestModel(page, alternateModel);
 
       const tier3Prompt = isVN
@@ -1077,6 +1080,7 @@ Directly begin with "# Plan: [Title]".`;
     try {
       console.warn(`[GeminiWeb Bypass] Tier 4: Autonomous fallback to 3.5 Flash-Lite...`);
       await this.resetToFreshChat(page);
+      await this.ensureSegmentedMode(page, "task");
       await this.ensureBestModel(page, "3.5 Flash-Lite");
 
       const tier4Prompt = `Kế hoạch kiến trúc phần mềm và đặc tả triển khai kỹ thuật cho: ${sanitized.sanitizedTask}.
@@ -1135,24 +1139,34 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
       ).first();
       if (await textbox.isVisible().catch(() => false)) {
         await textbox.click();
-        await page.waitForTimeout(600);
+        await page.waitForTimeout(400);
       }
 
-      // 2. Locate the model picker button
+      // 2. Locate the model picker button with highest specificity
       const modeBtn = page.locator(
-        'button[aria-label*="Mở công cụ chọn chế độ"], button[aria-label*="chọn chế độ"], button[aria-label*="mode"], button[data-test-id*="mode"], button:has-text("4 Argon"), button:has-text("Argon"), button:has-text("Pro Mở rộng"), button:has-text("Flash Mở rộng"), button:has-text("3.1 Pro"), button:has-text("3.8 Flash")'
+        'button[data-test-id="bard-mode-menu-button"], button.input-area-switch, button[aria-label*="chọn chế độ"], button[aria-label*="mode picker"], button[aria-label*="mode selector"], button:has-text("Argon"), button:has-text("4 Argon"), button:has-text("Flash"), button:has-text("Pro")'
       ).first();
 
       const isVisible = await modeBtn.isVisible({ timeout: 5000 }).catch(() => false);
       if (!isVisible) {
+        console.warn("[GeminiWeb] Mode button not found on page");
         return;
       }
 
       const currentText = (await modeBtn.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
       const currentAria = (await modeBtn.getAttribute("aria-label").catch(() => "")) || "";
 
-      // Check if already on target model (for models without thinking submenu, return early)
-      if (targetKey === "3.8") {
+      // 3. Check if already on target model to avoid unnecessary clicks or re-toggling
+      if (targetKey === "4.0") {
+        if (
+          (currentText.includes("Argon") || currentAria.includes("Argon")) &&
+          !currentText.includes("Flash") &&
+          !currentAria.includes("Flash")
+        ) {
+          console.log("[GeminiWeb] ✓ Already on 4 Argon (newest model)");
+          return;
+        }
+      } else if (targetKey === "3.8") {
         if (
           (currentText.includes("Flash") || currentText.includes("3.8") || currentAria.includes("Flash") || currentAria.includes("3.8")) &&
           !currentText.includes("Lite") &&
@@ -1161,22 +1175,24 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
           !currentAria.includes("Pro") &&
           !currentAria.includes("Argon")
         ) {
-          return; // Already on 3.8 Flash
+          console.log("[GeminiWeb] ✓ Already on 3.8 Flash");
+          return;
         }
       } else if (targetKey === "3.5") {
         if (currentText.includes("Lite") || currentText.includes("3.5") || currentAria.includes("Lite")) {
-          return; // Already on 3.5 Flash-Lite
+          console.log("[GeminiWeb] ✓ Already on 3.5 Flash-Lite");
+          return;
         }
       }
 
-      // 3. Click the mode button to open the menu
-      await modeBtn.click();
-      await page.waitForTimeout(800);
+      // 4. Click the mode button to open the menu
+      await modeBtn.click({ force: true });
+      await page.waitForTimeout(600);
 
-      // 4. Click target menu item directly via role="menuitem"
+      // 5. Click target menu item directly via role="menuitem"
       const targetItem = page.locator(
         targetKey === "4.0"
-          ? '[role="menuitem"]:has-text("4 Argon"), .mat-mdc-menu-item:has-text("4 Argon"), [role="menuitem"]:has-text("Argon"), [role="menuitem"]:has-text("4.0"), [role="menuitem"]:has-text("4")'
+          ? '[role="menuitem"]:has-text("4 Argon"), .mat-mdc-menu-item:has-text("4 Argon"), [role="menuitem"]:has-text("Argon"), .mat-mdc-menu-item:has-text("Argon"), [role="menuitem"]:has-text("4.0"), [role="menuitem"]:has-text("4")'
           : targetKey === "3.8"
           ? '[role="menuitem"]:has-text("3.8 Flash"), .mat-mdc-menu-item:has-text("3.8 Flash"), [role="menuitem"]:has-text("3.8"), .mat-mdc-menu-item:has-text("3.8"), [role="menuitem"]:has-text("Flash Mở rộng"), [role="menuitem"]:has-text("Flash")'
           : targetKey === "3.1"
@@ -1187,16 +1203,34 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
       if (await targetItem.isVisible({ timeout: 3000 }).catch(() => false)) {
         await targetItem.click({ force: true });
         await page.waitForTimeout(800);
+      } else {
+        console.warn(`[GeminiWeb] Target model item for ${targetKey} not found in dropdown menu`);
       }
 
-      // Ensure thinking level is set to maximum capacity for 4 Argon and thinking models
+      // Ensure thinking level is set to maximum capacity for 4 Argon and thinking models if submenu exists
       if (targetKey === "4.0" || targetKey === "3.1") {
         await this.ensureThinkingLevelMax(page);
       }
 
-      // 5. Ensure dropdown is closed
-      await page.keyboard.press("Escape").catch(() => {});
-      console.log(`[GeminiWeb] ✓ Model selector updated to target ${targetKey === "4.0" ? "4 Argon" : targetKey === "3.8" ? "3.8 Flash" : targetKey === "3.1" ? "3.1 Pro" : "3.5 Flash-Lite"}`);
+      // 6. Dismiss any lingering overlay backdrop
+      const backdrop = page.locator('.cdk-overlay-backdrop-showing').first();
+      if (await backdrop.isVisible().catch(() => false)) {
+        await page.keyboard.press("Escape").catch(() => {});
+        await page.waitForTimeout(300);
+      }
+
+      const postText = (await modeBtn.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+      console.log(
+        `[GeminiWeb] ✓ Model selector updated to target ${
+          targetKey === "4.0"
+            ? "4 Argon"
+            : targetKey === "3.8"
+            ? "3.8 Flash"
+            : targetKey === "3.1"
+            ? "3.1 Pro"
+            : "3.5 Flash-Lite"
+        } (current: "${postText}")`
+      );
     } catch (err: any) {
       console.warn(`[GeminiWeb] Model selection notice: ${err?.message || err}`);
     }
@@ -1242,16 +1276,49 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
    */
   public async ensureSegmentedMode(page: Page, mode: "task" | "chat" = "task"): Promise<void> {
     try {
-      const targetLabel = mode === "task" ? "Nhiệm vụ" : "Cuộc trò chuyện";
-      const btn = page
-        .locator(`button.gem-segmented-button-action:has-text("${targetLabel}")`)
-        .first();
-      if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await btn.click({ force: true });
-        await page.waitForTimeout(400);
-        console.log(`[GeminiWeb] ✓ Segmented mode configured to "${targetLabel}"`);
+      const isTask = mode === "task";
+
+      // 1. Check if the requested segmented mode is already active
+      const isAlreadyActive = await page.evaluate((targetIsTask) => {
+        const buttons = Array.from(document.querySelectorAll("gem-segmented-button"));
+        for (const btn of buttons) {
+          const text = (btn.textContent || "").trim();
+          const isSelected = btn.classList.contains("gem-segmented-button-selected");
+          if (targetIsTask) {
+            if (isSelected && (text.includes("Nhiệm vụ") || text.includes("Task"))) {
+              return true;
+            }
+          } else {
+            if (isSelected && (text.includes("Cuộc trò chuyện") || text.includes("Chat"))) {
+              return true;
+            }
+          }
+        }
+        return false;
+      }, isTask);
+
+      if (isAlreadyActive) {
+        console.log(`[GeminiWeb] ✓ Segmented mode already on "${isTask ? "Nhiệm vụ" : "Cuộc trò chuyện"}"`);
+        return;
       }
-    } catch {}
+
+      // 2. Click target segmented button
+      const btn = page
+        .locator(
+          isTask
+            ? 'button.gem-segmented-button-action:has-text("Nhiệm vụ"), button.gem-segmented-button-action:has-text("Task"), [role="tab"]:has-text("Nhiệm vụ"), [role="tab"]:has-text("Task")'
+            : 'button.gem-segmented-button-action:has-text("Cuộc trò chuyện"), button.gem-segmented-button-action:has-text("Chat"), [role="tab"]:has-text("Cuộc trò chuyện"), [role="tab"]:has-text("Chat")'
+        )
+        .first();
+
+      if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await btn.click({ force: true });
+        await page.waitForTimeout(600);
+        console.log(`[GeminiWeb] ✓ Segmented mode configured to "${isTask ? "Nhiệm vụ" : "Cuộc trò chuyện"}"`);
+      }
+    } catch (err: any) {
+      console.warn(`[GeminiWeb] Segmented mode selection notice: ${err?.message || err}`);
+    }
   }
 
   /**

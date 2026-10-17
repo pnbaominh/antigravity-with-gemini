@@ -4,6 +4,7 @@ export interface GenerateOptions {
   thinkingBudget?: number;
   temperature?: number;
   continueConversation?: boolean;
+  segmentedMode?: "task" | "chat";
 }
 
 export interface GenerateResult {
