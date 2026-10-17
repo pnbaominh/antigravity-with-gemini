@@ -1206,12 +1206,12 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
       // 5. Click target menu item directly via role="menuitem" and native DOM dispatch
       const targetItem = page.locator(
         targetKey === "4.0"
-          ? 'gem-menu-item:has-text("4 Argon"), [role="menuitem"]:has-text("4 Argon"), .mat-mdc-menu-item:has-text("4 Argon"), button:has-text("4 Argon"), [role="menuitem"]:has-text("Argon"), .mat-mdc-menu-item:has-text("Argon"), [role="menuitem"]:has-text("Nhiệm vụ phức tạp")'
+          ? 'gem-menu-item[data-test-id*="95a4c0abcba24364"], gem-menu-item[data-mode-id*="95a4c0abcba24364"], gem-menu-item:has-text("4 Argon"), [role="menuitem"]:has-text("4 Argon"), .mat-mdc-menu-item:has-text("4 Argon"), button:has-text("4 Argon"), [role="menuitem"]:has-text("Argon"), .mat-mdc-menu-item:has-text("Argon"), [role="menuitem"]:has-text("Nhiệm vụ phức tạp")'
           : targetKey === "3.8"
-          ? 'gem-menu-item:has-text("3.8 Flash"), [role="menuitem"]:has-text("3.8 Flash"), .mat-mdc-menu-item:has-text("3.8 Flash"), button:has-text("3.8 Flash"), [role="menuitem"]:has-text("3.8"), [role="menuitem"]:has-text("Flash")'
+          ? 'gem-menu-item[data-test-id*="56fdd199312815e2"], gem-menu-item[data-mode-id*="56fdd199312815e2"], gem-menu-item:has-text("3.8 Flash"), [role="menuitem"]:has-text("3.8 Flash"), .mat-mdc-menu-item:has-text("3.8 Flash"), button:has-text("3.8 Flash"), [role="menuitem"]:has-text("3.8"), [role="menuitem"]:has-text("Flash")'
           : targetKey === "3.1"
-          ? 'gem-menu-item:has-text("3.1 Pro"), [role="menuitem"]:has-text("3.1 Pro"), [role="menuitem"]:has-text("3.1"), [role="menuitem"]:has-text("Pro")'
-          : 'gem-menu-item:has-text("Flash-Lite"), [role="menuitem"]:has-text("Flash-Lite"), [role="menuitem"]:has-text("3.5")'
+          ? 'gem-menu-item[data-test-id*="e6fa609c3fa255c0"], gem-menu-item[data-mode-id*="e6fa609c3fa255c0"], gem-menu-item:has-text("3.1 Pro"), [role="menuitem"]:has-text("3.1 Pro"), [role="menuitem"]:has-text("3.1"), [role="menuitem"]:has-text("Pro")'
+          : 'gem-menu-item[data-test-id*="8c46e95b1a07cecc"], gem-menu-item[data-mode-id*="8c46e95b1a07cecc"], gem-menu-item:has-text("Flash-Lite"), [role="menuitem"]:has-text("Flash-Lite"), [role="menuitem"]:has-text("3.5")'
       ).first();
 
       if (await targetItem.isVisible({ timeout: 2500 }).catch(() => false)) {
@@ -1223,6 +1223,12 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
       await page.evaluate((key) => {
         const items = Array.from(document.querySelectorAll('gem-menu-item, [role="menuitem"], .mat-mdc-menu-item'));
         const match = items.find((el) => {
+          const testId = el.getAttribute("data-test-id") || "";
+          const modeId = el.getAttribute("data-mode-id") || "";
+          if (key === "4.0" && (testId.includes("95a4c0abcba24364") || modeId.includes("95a4c0abcba24364"))) return true;
+          if (key === "3.8" && (testId.includes("56fdd199312815e2") || modeId.includes("56fdd199312815e2"))) return true;
+          if (key === "3.1" && (testId.includes("e6fa609c3fa255c0") || modeId.includes("e6fa609c3fa255c0"))) return true;
+          if (key === "3.5" && (testId.includes("8c46e95b1a07cecc") || modeId.includes("8c46e95b1a07cecc"))) return true;
           const t = (el.textContent || "").trim();
           if (key === "4.0") return t.includes("4 Argon") || t.includes("Argon") || t.includes("Nhiệm vụ phức tạp");
           if (key === "3.8") return t.includes("3.8 Flash") || t.includes("Flash");
@@ -1267,6 +1273,12 @@ Vui lòng xuất tài liệu kỹ thuật bắt đầu với "# Plan: [Tên Hệ
         await page.evaluate((key) => {
           const items = Array.from(document.querySelectorAll('gem-menu-item, [role="menuitem"], .mat-mdc-menu-item'));
           const match = items.find((el) => {
+            const testId = el.getAttribute("data-test-id") || "";
+            const modeId = el.getAttribute("data-mode-id") || "";
+            if (key === "4.0" && (testId.includes("95a4c0abcba24364") || modeId.includes("95a4c0abcba24364"))) return true;
+            if (key === "3.8" && (testId.includes("56fdd199312815e2") || modeId.includes("56fdd199312815e2"))) return true;
+            if (key === "3.1" && (testId.includes("e6fa609c3fa255c0") || modeId.includes("e6fa609c3fa255c0"))) return true;
+            if (key === "3.5" && (testId.includes("8c46e95b1a07cecc") || modeId.includes("8c46e95b1a07cecc"))) return true;
             const t = (el.textContent || "").trim();
             if (key === "4.0") return t.includes("4 Argon") || t.includes("Argon") || t.includes("Nhiệm vụ phức tạp");
             if (key === "3.8") return t.includes("3.8 Flash") || t.includes("Flash");
